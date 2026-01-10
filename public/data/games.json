@@ -7,5 +7,14 @@
     "cover": "/assets/demo-game/cover.png",
     "screenshots": ["/assets/demo-game/screenshot1.png"],
     "controls": "方向键移动，A键跳跃"
+  },
+  {
+    "id": "snake",
+    "name": "贪吃蛇大作战",
+    "description": "经典贪吃蛇游戏，使用虚拟摇杆控制蛇的移动方向，吃食物增长身体并得分。撞到墙壁或自己的身体会游戏结束。",
+    "category": "休闲",
+    "cover": "/assets/snake-game/cover.png",
+    "screenshots": [],
+    "controls": "虚拟摇杆控制方向"
   }
 ]
