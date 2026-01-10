@@ -153,7 +153,7 @@ export class SnakeScene extends Phaser.Scene {
     if (!this.isPlaying || this.snake.length === 0) return
 
     // 平滑转向
-    const turnSpeed = 0.08
+    const turnSpeed = 0.18
     let angleDiff = this.targetDirection - this.direction
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2

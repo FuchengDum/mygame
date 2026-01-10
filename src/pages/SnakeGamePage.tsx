@@ -5,12 +5,14 @@ import { useGameStore } from '../store/gameStore'
 import { createGameConfig } from '../game/config'
 import { SnakeScene } from '../game/games/SnakeGame/SnakeScene'
 import Joystick from '../components/VirtualController/Joystick'
+import { useOrientation } from '../hooks/useOrientation'
 
 type GameState = 'ready' | 'playing' | 'paused' | 'gameover'
 
 export default function SnakeGamePage() {
   const navigate = useNavigate()
   const { saveProgress, getProgress } = useGameStore()
+  const isLandscape = useOrientation()
   const [gameState, setGameState] = useState<GameState>('ready')
   const [score, setScore] = useState(0)
   const [finalScore, setFinalScore] = useState(0)
@@ -112,7 +114,7 @@ export default function SnakeGamePage() {
       )}
 
       {/* 虚拟摇杆 */}
-      {gameState === 'playing' && <Joystick onInput={handleInput} />}
+      {gameState === 'playing' && <Joystick onInput={handleInput} isLandscape={isLandscape} />}
 
       {/* 开始界面 */}
       {gameState === 'ready' && (
