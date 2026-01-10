@@ -162,9 +162,6 @@ export class SnakeScene extends Phaser.Scene {
     doubleG.strokeCircle(r, r, 9)
     doubleG.generateTexture('food_double', size, size)
     doubleG.destroy()
-    // 添加文字
-    this.add.text(0, 0, '2x', { fontSize: '10px', color: '#fff', fontStyle: 'bold' })
-      .setOrigin(0.5).setVisible(false).setName('_double_text_template')
 
     // magnet - U形磁铁
     const magnetG = this.make.graphics({ x: 0, y: 0 })

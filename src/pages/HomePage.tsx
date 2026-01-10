@@ -8,13 +8,21 @@ export default function HomePage() {
   const navigate = useNavigate()
   const { games, setGames, searchQuery, setSearchQuery, category, setCategory } = useGameStore()
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const isLandscape = useOrientation()
 
   useEffect(() => {
     fetch('/data/games.json')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('加载失败')
+        return res.json()
+      })
       .then((data) => {
         setGames(data)
+        setLoading(false)
+      })
+      .catch(() => {
+        setError('游戏列表加载失败')
         setLoading(false)
       })
   }, [setGames])
@@ -86,6 +94,8 @@ export default function HomePage() {
       <div className={`flex-1 overflow-y-auto ${isLandscape ? 'p-2' : 'p-4 pt-2'}`}>
         {loading ? (
           <div className="text-center text-gray-500 mt-10">加载中...</div>
+        ) : error ? (
+          <div className="text-center text-red-400 mt-10">{error}</div>
         ) : (
           <div className={`grid gap-3 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2 gap-4'}`}>
             {filtered.map((game) => (
@@ -100,9 +110,10 @@ export default function HomePage() {
 
 function GameCard({ game, onClick, isLandscape }: { game: Game; onClick: () => void; isLandscape: boolean }) {
   return (
-    <div
+    <button
       onClick={onClick}
-      className="bg-dark-card rounded-xl overflow-hidden neon-border active:neon-glow transition-all"
+      aria-label={`${game.name} - ${game.category}`}
+      className="bg-dark-card rounded-xl overflow-hidden neon-border active:neon-glow transition-all text-left focus:outline-none focus:ring-2 focus:ring-neon-blue"
     >
       <div className={`${isLandscape ? 'aspect-[2/1]' : 'aspect-[4/3]'} bg-dark-border flex items-center justify-center`}>
         <span className={isLandscape ? 'text-2xl' : 'text-4xl'}>🎮</span>
@@ -111,6 +122,6 @@ function GameCard({ game, onClick, isLandscape }: { game: Game; onClick: () => v
         <h3 className={`font-medium text-white truncate ${isLandscape ? 'text-xs' : ''}`}>{game.name}</h3>
         {!isLandscape && <span className="text-xs text-gray-500">{game.category}</span>}
       </div>
-    </div>
+    </button>
   )
 }
