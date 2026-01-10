@@ -39,7 +39,7 @@ interface SnakeSegment {
 interface Food {
   x: number
   y: number
-  graphics: Phaser.GameObjects.Arc
+  graphics: Phaser.GameObjects.GameObject
   type: FoodType
   baseScore: number
   growth: number
@@ -71,6 +71,7 @@ export class SnakeScene extends Phaser.Scene {
   private scoreMultiplier: number = 1
   private scoreBuffUntilMs: number = 0
   private magnetUntilMs: number = 0
+  private collisionPenaltyUntilMs: number = 0
   private segmentSpacing: number = 12
   private score: number = 0
   private highScore: number = 0
@@ -108,6 +109,9 @@ export class SnakeScene extends Phaser.Scene {
     // 设置相机边界
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
+    // 生成特殊食物纹理
+    this.generateFoodTextures()
+
     // 绘制网格背景
     this.gridGraphics = this.add.graphics()
     this.drawGrid()
@@ -120,6 +124,77 @@ export class SnakeScene extends Phaser.Scene {
 
     // 初始 buffs 同步
     this.emitBuffs()
+  }
+
+  private generateFoodTextures() {
+    const size = 24
+    const r = size / 2
+
+    // speed - 闪电
+    const speedG = this.make.graphics({ x: 0, y: 0 })
+    speedG.fillStyle(0x00f5ff)
+    speedG.fillCircle(r, r, 9)
+    speedG.lineStyle(2, 0xffffff, 0.8)
+    speedG.strokeCircle(r, r, 9)
+    speedG.fillStyle(0xffffff)
+    speedG.fillTriangle(r + 2, r - 5, r - 3, r + 1, r + 1, r + 1)
+    speedG.fillTriangle(r - 2, r + 5, r + 3, r - 1, r - 1, r - 1)
+    speedG.generateTexture('food_speed', size, size)
+    speedG.destroy()
+
+    // slow - 蜗牛/沙漏
+    const slowG = this.make.graphics({ x: 0, y: 0 })
+    slowG.fillStyle(0xbf00ff)
+    slowG.fillCircle(r, r, 9)
+    slowG.lineStyle(2, 0xffffff, 0.8)
+    slowG.strokeCircle(r, r, 9)
+    slowG.fillStyle(0xffffff)
+    slowG.fillTriangle(r - 4, r - 4, r + 4, r - 4, r, r)
+    slowG.fillTriangle(r - 4, r + 4, r + 4, r + 4, r, r)
+    slowG.generateTexture('food_slow', size, size)
+    slowG.destroy()
+
+    // double - 2x
+    const doubleG = this.make.graphics({ x: 0, y: 0 })
+    doubleG.fillStyle(0xff00aa)
+    doubleG.fillCircle(r, r, 9)
+    doubleG.lineStyle(2, 0xffffff, 0.8)
+    doubleG.strokeCircle(r, r, 9)
+    doubleG.generateTexture('food_double', size, size)
+    doubleG.destroy()
+    // 添加文字
+    this.add.text(0, 0, '2x', { fontSize: '10px', color: '#fff', fontStyle: 'bold' })
+      .setOrigin(0.5).setVisible(false).setName('_double_text_template')
+
+    // magnet - U形磁铁
+    const magnetG = this.make.graphics({ x: 0, y: 0 })
+    magnetG.fillStyle(0x00aaff)
+    magnetG.fillCircle(r, r, 9)
+    magnetG.lineStyle(2, 0xffffff, 0.8)
+    magnetG.strokeCircle(r, r, 9)
+    magnetG.lineStyle(3, 0xffffff, 1)
+    magnetG.beginPath()
+    magnetG.arc(r, r + 1, 4, Math.PI, 0, true)
+    magnetG.strokePath()
+    magnetG.lineBetween(r - 4, r + 1, r - 4, r - 3)
+    magnetG.lineBetween(r + 4, r + 1, r + 4, r - 3)
+    magnetG.generateTexture('food_magnet', size, size)
+    magnetG.destroy()
+
+    // poison - 骷髅
+    const poisonG = this.make.graphics({ x: 0, y: 0 })
+    poisonG.fillStyle(0xff0044)
+    poisonG.fillCircle(r, r, 9)
+    poisonG.lineStyle(2, 0xffffff, 0.8)
+    poisonG.strokeCircle(r, r, 9)
+    poisonG.fillStyle(0xffffff)
+    poisonG.fillCircle(r, r - 1, 4)
+    poisonG.fillRect(r - 2, r + 2, 4, 3)
+    poisonG.fillStyle(0xff0044)
+    poisonG.fillCircle(r - 1.5, r - 1.5, 1)
+    poisonG.fillCircle(r + 1.5, r - 1.5, 1)
+    poisonG.generateTexture('food_poison', size, size)
+    poisonG.destroy()
   }
 
   private createMinimap() {
@@ -179,14 +254,37 @@ export class SnakeScene extends Phaser.Scene {
     this.minimapOverlay.lineStyle(1, 0xffffff, 0.45)
     this.minimapOverlay.strokeRect(viewX, viewY, viewW, viewH)
 
-    // 仅绘制“特殊食物”的点位，避免信息过载
+    // 仅绘制"特殊食物"的点位，使用不同形状区分
     for (const food of this.foods) {
       if (food.type === 'pellet') continue
       const def = FOOD_DEFINITIONS[food.type]
       const fx = mapX0 + (food.x / WORLD_WIDTH) * mapWidth
       const fy = padding + (food.y / WORLD_HEIGHT) * mapHeight
       this.minimapOverlay.fillStyle(def.color, 0.9)
-      this.minimapOverlay.fillCircle(fx, fy, 1.4)
+
+      // 不同类型使用不同形状
+      if (food.type === 'speed') {
+        // 闪电 - 三角形
+        this.minimapOverlay.fillTriangle(fx, fy - 2, fx - 1.5, fy + 1.5, fx + 1.5, fy + 1.5)
+      } else if (food.type === 'slow') {
+        // 沙漏 - 菱形
+        this.minimapOverlay.fillTriangle(fx, fy - 2, fx - 1.5, fy, fx + 1.5, fy)
+        this.minimapOverlay.fillTriangle(fx, fy + 2, fx - 1.5, fy, fx + 1.5, fy)
+      } else if (food.type === 'double') {
+        // 2x - 方形
+        this.minimapOverlay.fillRect(fx - 1.5, fy - 1.5, 3, 3)
+      } else if (food.type === 'magnet') {
+        // 磁铁 - U形（用半圆近似）
+        this.minimapOverlay.fillCircle(fx, fy, 1.5)
+      } else if (food.type === 'poison') {
+        // 毒药 - X形
+        this.minimapOverlay.lineStyle(1.5, def.color, 0.9)
+        this.minimapOverlay.lineBetween(fx - 1.5, fy - 1.5, fx + 1.5, fy + 1.5)
+        this.minimapOverlay.lineBetween(fx - 1.5, fy + 1.5, fx + 1.5, fy - 1.5)
+      } else {
+        // 默认圆形
+        this.minimapOverlay.fillCircle(fx, fy, 1.4)
+      }
     }
   }
 
@@ -228,6 +326,7 @@ export class SnakeScene extends Phaser.Scene {
     this.scoreMultiplier = 1
     this.scoreBuffUntilMs = 0
     this.magnetUntilMs = 0
+    this.collisionPenaltyUntilMs = 0
     this.mapMode = false
     this.emitBuffs()
 
@@ -315,18 +414,45 @@ export class SnakeScene extends Phaser.Scene {
       break
     }
 
-    const graphics = this.add.circle(x, y, def.radius, def.color)
-    graphics.setStrokeStyle(2, def.strokeColor ?? def.color, 0.6)
+    let graphics: Phaser.GameObjects.GameObject
+    const textureKey = `food_${type}`
 
-    if (def.pulse) {
-      this.tweens.add({
-        targets: graphics,
-        scale: { from: 0.85, to: 1.2 },
-        alpha: { from: 0.75, to: 1 },
-        duration: 550,
-        yoyo: true,
-        repeat: -1
-      })
+    if (this.textures.exists(textureKey)) {
+      // 特殊食物使用纹理
+      const img = this.add.image(x, y, textureKey)
+      if (type === 'double') {
+        // 为 double 添加 2x 文字
+        const txt = this.add.text(x, y, '2x', { fontSize: '9px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)
+        const container = this.add.container(x, y, [img.setPosition(0, 0), txt.setPosition(0, 0)])
+        graphics = container
+      } else {
+        graphics = img
+      }
+      if (def.pulse) {
+        this.tweens.add({
+          targets: graphics,
+          scale: { from: 0.85, to: 1.2 },
+          alpha: { from: 0.75, to: 1 },
+          duration: 550,
+          yoyo: true,
+          repeat: -1
+        })
+      }
+    } else {
+      // 普通食物使用圆形
+      const circle = this.add.circle(x, y, def.radius, def.color)
+      circle.setStrokeStyle(2, def.strokeColor ?? def.color, 0.6)
+      if (def.pulse) {
+        this.tweens.add({
+          targets: circle,
+          scale: { from: 0.85, to: 1.2 },
+          alpha: { from: 0.75, to: 1 },
+          duration: 550,
+          yoyo: true,
+          repeat: -1
+        })
+      }
+      graphics = circle
     }
 
     this.foods.push({ x, y, graphics, type, baseScore: def.baseScore, growth: def.growth })
@@ -400,6 +526,35 @@ export class SnakeScene extends Phaser.Scene {
     }
   }
 
+  private applySelfCollisionPenalty() {
+    const now = this.time.now
+    // 设置惩罚冷却（3秒内不再触发）
+    this.collisionPenaltyUntilMs = now + 3000
+
+    // 减速惩罚：0.5x 持续3秒
+    this.speedMultiplier = 0.5
+    this.speedBuffUntilMs = now + 3000
+
+    // 缩短蛇身
+    this.shrinkSnake(4)
+
+    // 扣分
+    this.score = Math.max(0, this.score - 30)
+    this.scoreCallback?.(this.score)
+
+    // 视觉反馈：蛇头闪红
+    const head = this.snake[0]
+    if (head) {
+      const originalColor = this.HEAD_COLOR
+      head.graphics.setFillStyle(0xff0044)
+      this.time.delayedCall(100, () => head.graphics.setFillStyle(originalColor))
+      this.time.delayedCall(200, () => head.graphics.setFillStyle(0xff0044))
+      this.time.delayedCall(300, () => head.graphics.setFillStyle(originalColor))
+    }
+
+    this.emitBuffs()
+  }
+
   update(_time: number, delta: number) {
     if (!this.isPlaying || this.snake.length === 0) return
     const now = this.time.now
@@ -437,17 +592,20 @@ export class SnakeScene extends Phaser.Scene {
         const s = Math.min(step, dist)
         food.x += (dx / dist) * s
         food.y += (dy / dist) * s
-        food.graphics.setPosition(food.x, food.y)
+        ;(food.graphics as any).setPosition(food.x, food.y)
       }
     }
 
-    // 自身碰撞检测（跳过前几节）
-    for (let i = 10; i < this.snake.length; i++) {
-      const seg = this.snake[i]
-      const dist = Phaser.Math.Distance.Between(newX, newY, seg.x, seg.y)
-      if (dist < 15) {
-        this.gameOver()
-        return
+    // 自身碰撞检测（跳过前几节）- 惩罚机制而非直接结束
+    const now_collision = this.time.now
+    if (now_collision > this.collisionPenaltyUntilMs) {
+      for (let i = 10; i < this.snake.length; i++) {
+        const seg = this.snake[i]
+        const dist = Phaser.Math.Distance.Between(newX, newY, seg.x, seg.y)
+        if (dist < 15) {
+          this.applySelfCollisionPenalty()
+          break
+        }
       }
     }
 
