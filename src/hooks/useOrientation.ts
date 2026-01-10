@@ -6,8 +6,11 @@ export function useOrientation() {
 
   useEffect(() => {
     const handleResize = () => {
-      setLandscape(window.innerWidth > window.innerHeight)
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+      setLandscape(viewportWidth > viewportHeight)
     }
+    handleResize()
     window.addEventListener('resize', handleResize)
     window.addEventListener('orientationchange', handleResize)
     return () => {

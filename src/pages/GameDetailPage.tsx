@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
+import { useOrientation } from '../hooks/useOrientation'
 
 export default function GameDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { games, currentGame, setCurrentGame } = useGameStore()
+  const isLandscape = useOrientation()
 
   useEffect(() => {
     const game = games.find((g) => g.id === id)
@@ -27,11 +29,17 @@ export default function GameDetailPage() {
   return (
     <div className="h-full flex flex-col bg-dark-bg">
       {/* 顶部图片 */}
-      <div className="relative aspect-video bg-dark-card flex items-center justify-center">
-        <span className="text-8xl">🎮</span>
+      <div
+        className={`relative bg-dark-card flex items-center justify-center ${
+          isLandscape ? 'h-32' : 'aspect-video'
+        }`}
+      >
+        <span className={isLandscape ? 'text-6xl' : 'text-8xl'}>🎮</span>
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center"
+          className={`absolute w-10 h-10 rounded-full bg-black/50 flex items-center justify-center ${
+            isLandscape ? 'top-2 left-2' : 'top-4 left-4'
+          }`}
         >
           ←
         </button>
