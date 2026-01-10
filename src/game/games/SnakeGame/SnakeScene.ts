@@ -1,5 +1,11 @@
 import Phaser from 'phaser'
 
+// 世界地图常量
+const WORLD_WIDTH = 4000
+const WORLD_HEIGHT = 3000
+const VIEWPORT_WIDTH = 800
+const GRID_SIZE = 20
+
 interface SnakeSegment {
   x: number
   y: number
@@ -17,7 +23,7 @@ interface Food {
 export class SnakeScene extends Phaser.Scene {
   private snake: SnakeSegment[] = []
   private foods: Food[] = []
-  private direction: number = 0 // 角度（弧度）
+  private direction: number = 0
   private targetDirection: number = 0
   private speed: number = 150
   private segmentSpacing: number = 12
@@ -26,6 +32,9 @@ export class SnakeScene extends Phaser.Scene {
   private isPlaying: boolean = false
   private scoreCallback?: (score: number) => void
   private gameOverCallback?: (score: number, highScore: number) => void
+  private gridGraphics?: Phaser.GameObjects.Graphics
+  private minimap?: Phaser.GameObjects.Graphics
+  private minimapDot?: Phaser.GameObjects.Arc
 
   // 颜色配置
   private readonly HEAD_COLOR = 0x00f5ff
@@ -45,32 +54,78 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   create() {
+    // 设置世界边界
+    this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+
+    // 设置相机边界
+    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+
     // 绘制网格背景
+    this.gridGraphics = this.add.graphics()
     this.drawGrid()
 
-    // 绘制边界
+    // 绘制世界边界
     this.drawBorder()
+
+    // 创建小地图（固定在屏幕右上角）
+    this.createMinimap()
+  }
+
+  private createMinimap() {
+    const mapWidth = 120
+    const mapHeight = 90
+    const padding = 10
+
+    // 小地图背景
+    this.minimap = this.add.graphics()
+    this.minimap.setScrollFactor(0)
+    this.minimap.setDepth(100)
+    this.minimap.fillStyle(0x000000, 0.6)
+    this.minimap.fillRect(VIEWPORT_WIDTH - mapWidth - padding, padding, mapWidth, mapHeight)
+    this.minimap.lineStyle(1, 0x00f5ff, 0.5)
+    this.minimap.strokeRect(VIEWPORT_WIDTH - mapWidth - padding, padding, mapWidth, mapHeight)
+
+    // 玩家位置点
+    this.minimapDot = this.add.circle(0, 0, 3, 0x00f5ff)
+    this.minimapDot.setScrollFactor(0)
+    this.minimapDot.setDepth(101)
+  }
+
+  private updateMinimap() {
+    if (!this.minimapDot || this.snake.length === 0) return
+
+    const mapWidth = 120
+    const mapHeight = 90
+    const padding = 10
+
+    const head = this.snake[0]
+    const mapX = VIEWPORT_WIDTH - mapWidth - padding + (head.x / WORLD_WIDTH) * mapWidth
+    const mapY = padding + (head.y / WORLD_HEIGHT) * mapHeight
+
+    this.minimapDot.setPosition(mapX, mapY)
   }
 
   private drawGrid() {
-    const graphics = this.add.graphics()
-    graphics.lineStyle(1, 0x1a1a2e, 0.5)
+    if (!this.gridGraphics) return
+    this.gridGraphics.clear()
+    this.gridGraphics.lineStyle(1, 0x1a1a2e, 0.5)
 
-    for (let x = 0; x <= 800; x += 20) {
-      graphics.moveTo(x, 0)
-      graphics.lineTo(x, 600)
+    // 绘制整个世界的网格
+    for (let x = 0; x <= WORLD_WIDTH; x += GRID_SIZE) {
+      this.gridGraphics.moveTo(x, 0)
+      this.gridGraphics.lineTo(x, WORLD_HEIGHT)
     }
-    for (let y = 0; y <= 600; y += 20) {
-      graphics.moveTo(0, y)
-      graphics.lineTo(800, y)
+    for (let y = 0; y <= WORLD_HEIGHT; y += GRID_SIZE) {
+      this.gridGraphics.moveTo(0, y)
+      this.gridGraphics.lineTo(WORLD_WIDTH, y)
     }
-    graphics.strokePath()
+    this.gridGraphics.strokePath()
   }
 
   private drawBorder() {
     const graphics = this.add.graphics()
-    graphics.lineStyle(3, 0xff0044, 0.8)
-    graphics.strokeRect(2, 2, 796, 596)
+    graphics.lineStyle(4, 0xff0044, 0.8)
+    graphics.strokeRect(2, 2, WORLD_WIDTH - 4, WORLD_HEIGHT - 4)
   }
 
   startGame() {
@@ -84,15 +139,18 @@ export class SnakeScene extends Phaser.Scene {
     this.targetDirection = 0
     this.isPlaying = true
 
-    // 创建初始蛇
-    const startX = 400
-    const startY = 300
+    // 创建初始蛇（在世界中心）
+    const startX = WORLD_WIDTH / 2
+    const startY = WORLD_HEIGHT / 2
     for (let i = 0; i < 5; i++) {
       this.addSegment(startX - i * this.segmentSpacing, startY)
     }
 
-    // 生成初始食物
-    for (let i = 0; i < 8; i++) {
+    // 相机跟随蛇头
+    this.cameras.main.startFollow(this.snake[0].graphics, true, 0.1, 0.1)
+
+    // 生成初始食物（更多食物分布在大地图上）
+    for (let i = 0; i < 50; i++) {
       this.spawnFood()
     }
 
@@ -126,8 +184,8 @@ export class SnakeScene extends Phaser.Scene {
 
   private spawnFood() {
     const margin = 30
-    const x = Phaser.Math.Between(margin, 800 - margin)
-    const y = Phaser.Math.Between(margin, 600 - margin)
+    const x = Phaser.Math.Between(margin, WORLD_WIDTH - margin)
+    const y = Phaser.Math.Between(margin, WORLD_HEIGHT - margin)
     const isLarge = Math.random() < 0.15
     const radius = isLarge ? 10 : 6
     const color = isLarge ? this.FOOD_LARGE_COLOR : this.FOOD_COLOR
@@ -166,7 +224,7 @@ export class SnakeScene extends Phaser.Scene {
     const newY = head.y + Math.sin(this.direction) * moveDistance
 
     // 边界检测
-    if (newX < 10 || newX > 790 || newY < 10 || newY > 590) {
+    if (newX < 10 || newX > WORLD_WIDTH - 10 || newY < 10 || newY > WORLD_HEIGHT - 10) {
       this.gameOver()
       return
     }
@@ -208,6 +266,9 @@ export class SnakeScene extends Phaser.Scene {
         this.eatFood(i)
       }
     }
+
+    // 更新小地图
+    this.updateMinimap()
   }
 
   private eatFood(index: number) {
