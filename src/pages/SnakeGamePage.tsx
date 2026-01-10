@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Phaser from 'phaser'
 import { useGameStore } from '../store/gameStore'
 import { createGameConfig } from '../game/config'
-import { SnakeScene } from '../game/games/SnakeGame/SnakeScene'
+import { SnakeScene, type SnakeBuffs } from '../game/games/SnakeGame/SnakeScene'
 import Joystick from '../components/VirtualController/Joystick'
 import { useOrientation } from '../hooks/useOrientation'
 
@@ -14,8 +14,16 @@ export default function SnakeGamePage() {
   const { saveProgress, getProgress } = useGameStore()
   const isLandscape = useOrientation()
   const [gameState, setGameState] = useState<GameState>('ready')
+  const [mapMode, setMapMode] = useState(false)
   const [score, setScore] = useState(0)
   const [finalScore, setFinalScore] = useState(0)
+  const [buffs, setBuffs] = useState<SnakeBuffs>({
+    speedMultiplier: 1,
+    speedRemainingMs: 0,
+    scoreMultiplier: 1,
+    scoreRemainingMs: 0,
+    magnetRemainingMs: 0,
+  })
   const [highScore, setHighScore] = useState(() => {
     const saved = getProgress('snake') as { highScore?: number } | null
     return saved?.highScore || 0
@@ -23,7 +31,11 @@ export default function SnakeGamePage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
   const sceneRef = useRef<SnakeScene | null>(null)
-  const callbacksRef = useRef({ onScore: setScore, onGameOver: (_s: number, _h: number) => {} })
+  const callbacksRef = useRef({
+    onScore: setScore,
+    onGameOver: (_s: number, _h: number) => {},
+    onBuffs: (_b: SnakeBuffs) => {},
+  })
 
   // 更新回调引用
   callbacksRef.current.onGameOver = useCallback((finalScore: number, newHighScore: number) => {
@@ -32,6 +44,10 @@ export default function SnakeGamePage() {
     setGameState('gameover')
     saveProgress('snake', { highScore: newHighScore })
   }, [saveProgress])
+
+  callbacksRef.current.onBuffs = useCallback((next: SnakeBuffs) => {
+    setBuffs(next)
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return
@@ -45,7 +61,8 @@ export default function SnakeGamePage() {
         super.init({
           highScore: savedHighScore,
           onScore: (s: number) => callbacks.onScore(s),
-          onGameOver: (s: number, h: number) => callbacks.onGameOver(s, h)
+          onGameOver: (s: number, h: number) => callbacks.onGameOver(s, h),
+          onBuffs: (b: SnakeBuffs) => callbacks.onBuffs(b),
         })
       }
     }
@@ -72,7 +89,15 @@ export default function SnakeGamePage() {
 
   const startGame = useCallback(() => {
     setGameState('playing')
+    setMapMode(false)
     setScore(0)
+    setBuffs({
+      speedMultiplier: 1,
+      speedRemainingMs: 0,
+      scoreMultiplier: 1,
+      scoreRemainingMs: 0,
+      magnetRemainingMs: 0,
+    })
     sceneRef.current?.startGame()
   }, [])
 
@@ -92,6 +117,13 @@ export default function SnakeGamePage() {
     }
   }, [gameState])
 
+  const toggleMap = useCallback(() => {
+    const next = sceneRef.current?.toggleMapMode()
+    if (typeof next === 'boolean') setMapMode(next)
+  }, [])
+
+  const formatSeconds = (ms: number) => Math.max(1, Math.ceil(ms / 1000))
+
   return (
     <div className="h-full bg-black relative overflow-hidden">
       {/* Phaser 游戏 */}
@@ -103,13 +135,42 @@ export default function SnakeGamePage() {
           <div className="absolute top-4 left-4 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-cyan-400/30 z-10">
             <div className="text-cyan-400 font-mono text-xl">{score}</div>
             <div className="text-gray-500 text-xs">最高: {highScore}</div>
+            <div className="flex gap-1 mt-1">
+              {buffs.scoreRemainingMs > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-pink-500/20 border border-pink-500/40 text-pink-200 text-[10px]">
+                  x{buffs.scoreMultiplier} {formatSeconds(buffs.scoreRemainingMs)}s
+                </span>
+              )}
+              {buffs.speedRemainingMs > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-[10px]">
+                  {buffs.speedMultiplier > 1 ? '加速' : '减速'} {formatSeconds(buffs.speedRemainingMs)}s
+                </span>
+              )}
+              {buffs.magnetRemainingMs > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 text-blue-200 text-[10px]">
+                  磁铁 {formatSeconds(buffs.magnetRemainingMs)}s
+                </span>
+              )}
+            </div>
           </div>
-          <button
-            onClick={togglePause}
-            className="absolute top-4 right-4 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 text-white z-10"
-          >
-            ⏸️
-          </button>
+          <div className="absolute top-4 right-4 flex gap-2 z-10">
+            <button
+              onClick={toggleMap}
+              className={`bg-black/60 backdrop-blur px-4 py-2 rounded-lg border text-white ${
+                mapMode ? 'border-cyan-400/60' : 'border-cyan-400/30'
+              }`}
+              aria-label="切换大地图"
+            >
+              🗺️
+            </button>
+            <button
+              onClick={togglePause}
+              className="bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 text-white"
+              aria-label="暂停"
+            >
+              ⏸️
+            </button>
+          </div>
         </>
       )}
 
