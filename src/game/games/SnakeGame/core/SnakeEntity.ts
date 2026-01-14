@@ -98,12 +98,15 @@ export class SnakeEntity {
     // 更新buff状态
     this.updateBuffs(now)
 
-    // 平滑转向
+    // 平滑转向 - 限制最大转向角度防止原地转圈
     const turnSpeed = 0.18
+    const maxTurnPerFrame = Math.PI * 0.15 // 最大每帧转27度，防止急转弯
     let angleDiff = this.state.targetDirection - this.state.direction
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-    this.state.direction += angleDiff * turnSpeed
+    // 限制转向幅度
+    const turnAmount = Math.max(-maxTurnPerFrame, Math.min(maxTurnPerFrame, angleDiff * turnSpeed))
+    this.state.direction += turnAmount
 
     // 计算速度（考虑buff）
     let speedMult = this.buffs.speedMultiplier

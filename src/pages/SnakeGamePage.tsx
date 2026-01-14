@@ -97,7 +97,7 @@ export default function SnakeGamePage() {
     const config: GameConfig = {
       skinId: lobbyConfig.skinId,
       nickname: lobbyConfig.nickname,
-      aiCount: 5,
+      aiCount: 15,
       difficulty: 'medium'
     }
 

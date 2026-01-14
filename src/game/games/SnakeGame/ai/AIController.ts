@@ -44,6 +44,11 @@ export class AIController {
   private world: GameWorld
   private config: AIConfig
   private lastUpdateTime: Map<string, number> = new Map()
+  // 游荡目标
+  private wanderTargets: Map<string, Point> = new Map()
+  private wanderSetTime: Map<string, number> = new Map()
+  // 绕圈检测
+  private positionHistory: Map<string, Point[]> = new Map()
 
   constructor(world: GameWorld, difficulty: AIDifficulty = 'medium') {
     this.world = world
@@ -67,7 +72,16 @@ export class AIController {
 
   private updateAI(snake: SnakeEntity) {
     const head = snake.head
+    const now = Date.now()
     let targetAngle = snake.state.direction
+
+    // 0. 绕圈检测 - 记录位置历史
+    this.recordPosition(snake.state.id, head)
+    if (this.isSpinning(snake.state.id)) {
+      // 强制换航点
+      this.wanderTargets.delete(snake.state.id)
+      this.wanderSetTime.delete(snake.state.id)
+    }
 
     // 1. 寻找最近的食物
     const foodTarget = this.findNearestFood(head)
@@ -79,9 +93,19 @@ export class AIController {
     if (foodTarget) {
       const foodAngle = Math.atan2(foodTarget.y - head.y, foodTarget.x - head.x)
       targetAngle = foodAngle
+    } else {
+      // 无食物时使用游荡目标
+      const wanderTarget = this.getWanderTarget(snake.state.id, head, now)
+      targetAngle = Math.atan2(wanderTarget.y - head.y, wanderTarget.x - head.x)
     }
 
-    // 4. 应用危险回避
+    // 4. 中心吸引力（微弱权重）
+    const centerX = WORLD_WIDTH / 2
+    const centerY = WORLD_HEIGHT / 2
+    const centerAngle = Math.atan2(centerY - head.y, centerX - head.x)
+    targetAngle = this.blendAngles(targetAngle, centerAngle, 0.1)
+
+    // 5. 应用危险回避
     if (dangerVector.magnitude > 0) {
       const avoidAngle = Math.atan2(dangerVector.y, dangerVector.x)
       // 混合食物方向和回避方向
@@ -89,7 +113,7 @@ export class AIController {
       targetAngle = this.blendAngles(targetAngle, avoidAngle, avoidWeight)
     }
 
-    // 5. 边界回避
+    // 6. 边界回避
     const boundaryAngle = this.getBoundaryAvoidanceAngle(head)
     if (boundaryAngle !== null) {
       targetAngle = this.blendAngles(targetAngle, boundaryAngle, 0.8)
@@ -97,9 +121,54 @@ export class AIController {
 
     snake.setTargetDirection(targetAngle)
 
-    // 6. 决定是否加速
+    // 7. 决定是否加速
     const shouldBoost = this.shouldBoost(snake, foodTarget)
     snake.setBoost(shouldBoost)
+  }
+
+  // 获取游荡目标（保持1.5-3秒）
+  private getWanderTarget(id: string, head: Point, now: number): Point {
+    const existing = this.wanderTargets.get(id)
+    const setTime = this.wanderSetTime.get(id) || 0
+
+    // 如果有目标且未过期且未到达，继续使用
+    if (existing && now - setTime < 2000 && distance(head, existing) > 80) {
+      return existing
+    }
+
+    // 生成新目标（偏向中心区域）
+    const margin = 200
+    const target = {
+      x: margin + Math.random() * (WORLD_WIDTH - margin * 2),
+      y: margin + Math.random() * (WORLD_HEIGHT - margin * 2)
+    }
+    this.wanderTargets.set(id, target)
+    this.wanderSetTime.set(id, now)
+    return target
+  }
+
+  // 记录位置历史（用于绕圈检测）
+  private recordPosition(id: string, pos: Point) {
+    let history = this.positionHistory.get(id)
+    if (!history) {
+      history = []
+      this.positionHistory.set(id, history)
+    }
+    history.push({ x: pos.x, y: pos.y })
+    if (history.length > 30) history.shift() // 保留约2秒历史
+  }
+
+  // 检测是否在绕圈（位移小但转角大）
+  private isSpinning(id: string): boolean {
+    const history = this.positionHistory.get(id)
+    if (!history || history.length < 20) return false
+
+    const first = history[0]
+    const last = history[history.length - 1]
+    const displacement = distance(first, last)
+
+    // 如果2秒内位移小于50像素，认为在绕圈
+    return displacement < 50
   }
 
   private findNearestFood(pos: Point): Point | null {
