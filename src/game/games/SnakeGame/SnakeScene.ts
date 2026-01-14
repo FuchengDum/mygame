@@ -41,6 +41,7 @@ export class SnakeScene extends Phaser.Scene {
   private foodGraphicsMap: Map<string, FoodGraphics> = new Map()
 
   private gridGraphics?: Phaser.GameObjects.Graphics
+  private magnetGraphics?: Phaser.GameObjects.Graphics
   private minimapBg?: Phaser.GameObjects.Graphics
   private minimapOverlay?: Phaser.GameObjects.Graphics
   private minimapDots: Map<string, Phaser.GameObjects.Arc> = new Map()
@@ -66,6 +67,8 @@ export class SnakeScene extends Phaser.Scene {
     this.generateFoodTextures()
 
     this.gridGraphics = this.add.graphics()
+    this.magnetGraphics = this.add.graphics()
+    this.magnetGraphics.setDepth(1) // 确保在蛇身下方 (蛇身通常是默认层级，后添加的会在上面)
     this.drawGrid()
     this.drawBorder()
     this.createMinimap()
@@ -179,7 +182,7 @@ export class SnakeScene extends Phaser.Scene {
     const gameConfig = config || this.config || {
       skinId: 'cyan',
       nickname: 'Player',
-      aiCount: 5,
+      aiCount: 15,
       difficulty: 'medium' as const
     }
 
@@ -229,6 +232,7 @@ export class SnakeScene extends Phaser.Scene {
       dot.destroy()
     }
     this.minimapDots.clear()
+    this.magnetGraphics?.clear()
   }
 
   update(_time: number, delta: number) {
@@ -244,6 +248,9 @@ export class SnakeScene extends Phaser.Scene {
     // 渲染所有食物
     this.renderFoods()
 
+    // 渲染磁铁特效
+    this.renderMagnetEffects()
+
     // 更新相机跟随
     const playerPos = this.world.getPlayerPosition()
     if (playerPos) {
@@ -252,6 +259,37 @@ export class SnakeScene extends Phaser.Scene {
 
     // 更新小地图
     this.updateMinimap()
+  }
+
+  private renderMagnetEffects() {
+    if (!this.magnetGraphics) return
+    this.magnetGraphics.clear()
+
+    const aliveSnakes = this.world.getAliveSnakes()
+    const foods = this.world.foods
+    const PULL_RADIUS = 260
+    const PULL_RADIUS_SQ = PULL_RADIUS * PULL_RADIUS
+
+    for (const snake of aliveSnakes) {
+      if (!snake.hasMagnet) continue
+
+      const head = snake.head
+      // 使用青色线条，透明度随距离变化
+      this.magnetGraphics.lineStyle(2, 0x00f5ff, 0.3)
+
+      for (const food of foods) {
+        const dx = head.x - food.x
+        const dy = head.y - food.y
+        const distSq = dx * dx + dy * dy
+
+        if (distSq < PULL_RADIUS_SQ) {
+          // 距离越近，线条越明显
+          const alpha = 1 - (Math.sqrt(distSq) / PULL_RADIUS)
+          this.magnetGraphics.lineStyle(2, 0x00f5ff, alpha * 0.5)
+          this.magnetGraphics.lineBetween(food.x, food.y, head.x, head.y)
+        }
+      }
+    }
   }
 
   private renderSnakes() {
@@ -350,10 +388,17 @@ export class SnakeScene extends Phaser.Scene {
       }
     }
 
-    // 渲染新食物
+    // 渲染食物（新建或更新位置）
     for (const food of foods) {
-      if (!this.foodGraphicsMap.has(food.id)) {
+      const fg = this.foodGraphicsMap.get(food.id)
+      if (!fg) {
         this.createFoodGraphics(food)
+      } else {
+        // 更新被吸引食物的位置
+        const gfx = fg.graphics as unknown as { x: number; y: number; setPosition: (x: number, y: number) => void }
+        if (gfx.x !== food.x || gfx.y !== food.y) {
+          gfx.setPosition(food.x, food.y)
+        }
       }
     }
   }
