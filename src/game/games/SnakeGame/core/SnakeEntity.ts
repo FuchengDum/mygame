@@ -107,16 +107,20 @@ export class SnakeEntity {
     }
 
     // 移动蛇头
-    const moveDistance = this.state.speed * speedMult * dt
+    const safeDt = Math.max(0.001, Math.min(dt, 0.1)) // 限制 dt 范围防止异常
+    const moveDistance = this.state.speed * speedMult * safeDt
 
     // 平滑转向 - 最小转弯半径约束防止原地转圈
     const turnSpeed = 0.18
     const minTurnRadius = 25 // 最小转弯半径(像素)
-    // 动态限制：角速度 = 速度 / 半径
-    const maxTurnPerFrame = Math.min(Math.PI * 0.035, moveDistance / minTurnRadius)
+    const maxTurnPerSecond = Math.PI * 2.5 // 每秒最大转450度
+    // 动态限制：取时间约束和半径约束的较小值
+    const maxTurnByTime = maxTurnPerSecond * safeDt
+    const maxTurnByRadius = moveDistance > 0 ? moveDistance / minTurnRadius : 0
+    const maxTurnPerFrame = Math.max(0, Math.min(maxTurnByTime, maxTurnByRadius))
     let angleDiff = this.state.targetDirection - this.state.direction
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+    // 角度归一化（使用取模避免循环）
+    angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
     const turnAmount = Math.max(-maxTurnPerFrame, Math.min(maxTurnPerFrame, angleDiff * turnSpeed))
     this.state.direction += turnAmount
     const head = this.state.segments[0]
