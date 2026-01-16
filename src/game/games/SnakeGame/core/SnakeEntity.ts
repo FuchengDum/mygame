@@ -22,6 +22,16 @@ export interface Buffs {
   magnetUntil: number
 }
 
+// 拖延检测状态
+interface StallState {
+  startPos: Point | null      // 检测窗口起始位置
+  startTime: number           // 检测窗口起始时间
+  totalDistance: number       // 累计路程
+  totalTurn: number           // 累计转角
+  stallValue: number          // 拖延值 (0-1)
+  recentGrowth: number        // 近期增长量（用于进食豁免）
+}
+
 export class SnakeEntity {
   public state: SnakeState
   public buffs: Buffs = {
@@ -30,6 +40,15 @@ export class SnakeEntity {
     scoreMultiplier: 1,
     scoreUntil: 0,
     magnetUntil: 0
+  }
+  // 拖延检测
+  private stallState: StallState = {
+    startPos: null,
+    startTime: 0,
+    totalDistance: 0,
+    totalTurn: 0,
+    stallValue: 0,
+    recentGrowth: 0
   }
 
   constructor(
@@ -110,9 +129,13 @@ export class SnakeEntity {
     const safeDt = Math.max(0.001, Math.min(dt, 0.1)) // 限制 dt 范围防止异常
     const moveDistance = this.state.speed * speedMult * safeDt
 
+    // 更新拖延检测
+    this.updateStallDetection(now, moveDistance, safeDt)
+
     // 平滑转向 - 最小转弯半径约束防止原地转圈
     const turnSpeed = 0.18
-    const minTurnRadius = 25 // 最小转弯半径(像素)
+    // 根据拖延值动态调整最小转弯半径: 25 -> 50 (降低惩罚强度)
+    const minTurnRadius = 25 + this.stallState.stallValue * 25
     const maxTurnPerSecond = Math.PI * 2.5 // 每秒最大转450度
     // 动态限制：取时间约束和半径约束的较小值
     const maxTurnByTime = maxTurnPerSecond * safeDt
@@ -121,6 +144,8 @@ export class SnakeEntity {
     let angleDiff = this.state.targetDirection - this.state.direction
     // 角度归一化（使用取模避免循环）
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
+    // 累计转角用于拖延检测
+    this.stallState.totalTurn += Math.abs(angleDiff) * turnSpeed
     const turnAmount = Math.max(-maxTurnPerFrame, Math.min(maxTurnPerFrame, angleDiff * turnSpeed))
     this.state.direction += turnAmount
     const head = this.state.segments[0]
@@ -161,6 +186,8 @@ export class SnakeEntity {
       this.state.segments.push({ x: tail.x, y: tail.y })
     }
     this.state.length = this.state.segments.length
+    // 记录近期增长（用于进食豁免）
+    this.stallState.recentGrowth += amount
   }
 
   // 消耗长度（加速时）
@@ -237,5 +264,64 @@ export class SnakeEntity {
   // 检查磁铁是否激活
   get hasMagnet(): boolean {
     return Date.now() < this.buffs.magnetUntil
+  }
+
+  // 获取当前拖延值 (0-1)
+  get stallValue(): number {
+    return this.stallState.stallValue
+  }
+
+  // 更新拖延检测
+  private updateStallDetection(now: number, moveDistance: number, dt: number) {
+    // 健壮性检查
+    if (this.state.segments.length === 0 || !Number.isFinite(moveDistance)) return
+
+    const WINDOW_MS = 2500        // 检测窗口2.5秒
+    const DISPLACEMENT_THRESHOLD = 60  // 净位移阈值
+    const TURN_THRESHOLD = Math.PI * 3 // 累计转角阈值(约540度)
+    const DECAY_RATE = 0.5        // 拖延值衰减速率/秒
+    const GROWTH_EXEMPT = 3       // 进食豁免阈值
+
+    const head = this.state.segments[0]
+    this.stallState.totalDistance += moveDistance
+
+    // 每帧平滑衰减拖延值
+    if (this.stallState.stallValue > 0) {
+      this.stallState.stallValue = Math.max(0, this.stallState.stallValue - DECAY_RATE * dt)
+    }
+
+    // 初始化或重置窗口
+    if (!this.stallState.startPos || now - this.stallState.startTime > WINDOW_MS) {
+      // 计算上一窗口的拖延判定
+      if (this.stallState.startPos) {
+        const displacement = Math.hypot(
+          head.x - this.stallState.startPos.x,
+          head.y - this.stallState.startPos.y
+        )
+        // 进食豁免：近期有增长则不判定为拖延
+        const isEating = this.stallState.recentGrowth >= GROWTH_EXEMPT
+        // 路程大但位移小 + 转角大 = 拖延（进食时豁免）
+        const isStalling = !isEating &&
+                          displacement < DISPLACEMENT_THRESHOLD &&
+                          this.stallState.totalTurn > TURN_THRESHOLD &&
+                          this.stallState.totalDistance > 150
+
+        if (isStalling) {
+          // 增加拖延值
+          this.stallState.stallValue = Math.min(1, this.stallState.stallValue + 0.2)
+        }
+      }
+      // 重置窗口
+      this.stallState.startPos = { x: head.x, y: head.y }
+      this.stallState.startTime = now
+      this.stallState.totalDistance = 0
+      this.stallState.totalTurn = 0
+      this.stallState.recentGrowth = 0
+    }
+
+    // 确保 stallValue 有效
+    if (!Number.isFinite(this.stallState.stallValue)) {
+      this.stallState.stallValue = 0
+    }
   }
 }
