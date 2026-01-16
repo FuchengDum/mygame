@@ -98,16 +98,6 @@ export class SnakeEntity {
     // 更新buff状态
     this.updateBuffs(now)
 
-    // 平滑转向 - 限制最大转向角度防止原地转圈
-    const turnSpeed = 0.18
-    const maxTurnPerFrame = Math.PI * 0.15 // 最大每帧转27度，防止急转弯
-    let angleDiff = this.state.targetDirection - this.state.direction
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-    // 限制转向幅度
-    const turnAmount = Math.max(-maxTurnPerFrame, Math.min(maxTurnPerFrame, angleDiff * turnSpeed))
-    this.state.direction += turnAmount
-
     // 计算速度（考虑buff）
     let speedMult = this.buffs.speedMultiplier
     if (this.state.isBoosting && this.canBoost) {
@@ -117,7 +107,22 @@ export class SnakeEntity {
     }
 
     // 移动蛇头
-    const moveDistance = this.state.speed * speedMult * dt
+    const safeDt = Math.max(0.001, Math.min(dt, 0.1)) // 限制 dt 范围防止异常
+    const moveDistance = this.state.speed * speedMult * safeDt
+
+    // 平滑转向 - 最小转弯半径约束防止原地转圈
+    const turnSpeed = 0.18
+    const minTurnRadius = 25 // 最小转弯半径(像素)
+    const maxTurnPerSecond = Math.PI * 2.5 // 每秒最大转450度
+    // 动态限制：取时间约束和半径约束的较小值
+    const maxTurnByTime = maxTurnPerSecond * safeDt
+    const maxTurnByRadius = moveDistance > 0 ? moveDistance / minTurnRadius : 0
+    const maxTurnPerFrame = Math.max(0, Math.min(maxTurnByTime, maxTurnByRadius))
+    let angleDiff = this.state.targetDirection - this.state.direction
+    // 角度归一化（使用取模避免循环）
+    angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
+    const turnAmount = Math.max(-maxTurnPerFrame, Math.min(maxTurnPerFrame, angleDiff * turnSpeed))
+    this.state.direction += turnAmount
     const head = this.state.segments[0]
     const newX = head.x + Math.cos(this.state.direction) * moveDistance
     const newY = head.y + Math.sin(this.state.direction) * moveDistance
