@@ -23,13 +23,27 @@ export default function PhaserGame({ scene, onReady }: Props) {
       setTimeout(() => onReady?.(game), 100)
     })
 
-    const resizeObserver = new ResizeObserver(() => {
-      game.scale.refresh()
-    })
-    resizeObserver.observe(containerRef.current)
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      const resizeObserver = new ResizeObserver(() => {
+        if (gameRef.current && containerRef.current) {
+          const w = containerRef.current.clientWidth
+          const h = containerRef.current.clientHeight
+          if (w > 0 && h > 0) {
+            gameRef.current.scale.resize(w, h)
+            gameRef.current.scale.refresh()
+          }
+        }
+      })
+      resizeObserver.observe(containerRef.current)
+
+      return () => {
+        resizeObserver.disconnect()
+        gameRef.current?.destroy(true)
+        gameRef.current = null
+      }
+    }
 
     return () => {
-      resizeObserver.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null
     }

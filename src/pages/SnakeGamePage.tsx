@@ -37,6 +37,7 @@ export default function SnakeGamePage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
   const sceneRef = useRef<SnakeScene | null>(null)
+  const pendingStartConfigRef = useRef<GameConfig | null>(null)
 
   // 回调引用
   const callbacksRef = useRef<BattleCallbacks>({})
@@ -70,13 +71,17 @@ export default function SnakeGamePage() {
     const parentEl = containerRef.current
     let rafId = 0
     let resizeObserver: ResizeObserver | null = null
+    let lastW = 0
+    let lastH = 0
 
     const syncScaleToParent = () => {
       const game = gameRef.current
       if (!game) return
       const w = parentEl.clientWidth
       const h = parentEl.clientHeight
-      if (w === 0 || h === 0) return
+      if (w === 0 || h === 0 || (w === lastW && h === lastH)) return
+      lastW = w
+      lastH = h
       game.scale.resize(w, h)
       game.scale.refresh()
     }
@@ -104,6 +109,10 @@ export default function SnakeGamePage() {
         setTimeout(() => {
           const scene = game.scene.getScene('SnakeScene') as SnakeScene
           sceneRef.current = scene
+          if (pendingStartConfigRef.current) {
+            scene.startGame(pendingStartConfigRef.current)
+            pendingStartConfigRef.current = null
+          }
         }, 100)
       })
 
@@ -161,8 +170,11 @@ export default function SnakeGamePage() {
     setPlayerId(`snake_1`)
 
     const scene = sceneRef.current
-    if (scene) scene.startGame(config)
-    else pendingStartConfigRef.current = config
+    if (scene) {
+      scene.startGame(config)
+    } else {
+      pendingStartConfigRef.current = config
+    }
   }, [])
 
   // 重新开始
