@@ -26,7 +26,10 @@ export function usePWAInstall() {
 
     const checkIOS = () => {
       const ua = navigator.userAgent.toLowerCase()
-      return /iphone|ipad|ipod/.test(ua) && /safari/.test(ua) && !/crios/.test(ua)
+      const isIPhone = /iphone|ipod/.test(ua)
+      const isIPad = /ipad/.test(ua) || (ua.includes('macintosh') && navigator.maxTouchPoints > 4)
+      const isSafari = /safari/.test(ua) && !/crios|fxios/.test(ua)
+      return (isIPhone || isIPad) && isSafari
     }
 
     const checkInstalled = () => {
@@ -41,8 +44,13 @@ export function usePWAInstall() {
 
     // iOS 用户且未安装时，显示安装提示（仅首次）
     if (ios && !installed) {
-      const dismissed = localStorage.getItem('pwa-install-dismissed')
-      if (!dismissed) {
+      try {
+        const dismissed = localStorage.getItem('pwa-install-dismissed')
+        if (!dismissed) {
+          setShowPrompt(true)
+        }
+      } catch {
+        // Safari 隐私模式或存储禁用，直接显示提示
         setShowPrompt(true)
       }
     }
@@ -69,7 +77,11 @@ export function usePWAInstall() {
 
   const dismiss = useCallback(() => {
     setShowPrompt(false)
-    localStorage.setItem('pwa-install-dismissed', 'true')
+    try {
+      localStorage.setItem('pwa-install-dismissed', 'true')
+    } catch {
+      // 存储不可用，忽略
+    }
   }, [])
 
   return { showPrompt, isInstalled, install, dismiss, isIOS }

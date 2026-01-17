@@ -39,6 +39,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
 
   const url = new URL(event.request.url)
+  const isSameOrigin = url.origin === self.location.origin
   const isAsset = /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/i.test(url.pathname)
   const isNavigation = event.request.mode === 'navigate'
 
@@ -52,7 +53,7 @@ self.addEventListener('fetch', (event) => {
         }
 
         const responseToCache = response.clone()
-        if (isAsset || isNavigation) {
+        if (isSameOrigin && (isAsset || isNavigation)) {
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch((err) => {
               console.error('Cache put failed:', err)
