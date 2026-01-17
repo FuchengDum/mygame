@@ -70,9 +70,12 @@ export default function SnakeGamePage() {
 
     const parentEl = containerRef.current
     let rafId = 0
+    let resizeRafId = 0
     let resizeObserver: ResizeObserver | null = null
     let lastW = 0
     let lastH = 0
+    let lastRoW = 0
+    let lastRoH = 0
 
     const syncScaleToParent = () => {
       const game = gameRef.current
@@ -106,14 +109,12 @@ export default function SnakeGamePage() {
       gameRef.current = game
 
       game.events.once(Phaser.Core.Events.READY, () => {
-        setTimeout(() => {
-          const scene = game.scene.getScene('SnakeScene') as SnakeScene
-          sceneRef.current = scene
-          if (pendingStartConfigRef.current) {
-            scene.startGame(pendingStartConfigRef.current)
-            pendingStartConfigRef.current = null
-          }
-        }, 100)
+        const scene = game.scene.getScene('SnakeScene') as SnakeScene
+        sceneRef.current = scene
+        if (pendingStartConfigRef.current) {
+          scene.startGame(pendingStartConfigRef.current)
+          pendingStartConfigRef.current = null
+        }
       })
 
       setResizeCallback((width, height) => {
@@ -130,7 +131,17 @@ export default function SnakeGamePage() {
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
         maybeInitGame()
-        syncScaleToParent()
+        if (resizeRafId) return
+        resizeRafId = requestAnimationFrame(() => {
+          resizeRafId = 0
+          const w = parentEl.clientWidth
+          const h = parentEl.clientHeight
+          if (w !== lastRoW || h !== lastRoH) {
+            lastRoW = w
+            lastRoH = h
+            syncScaleToParent()
+          }
+        })
       })
       resizeObserver.observe(parentEl)
     }
@@ -146,6 +157,7 @@ export default function SnakeGamePage() {
 
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId)
+      if (resizeRafId) window.cancelAnimationFrame(resizeRafId)
       resizeObserver?.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null
