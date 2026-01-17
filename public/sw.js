@@ -8,7 +8,9 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(() => {})
+      return cache.addAll(ASSETS_TO_CACHE)
+    }).catch((err) => {
+      console.error('Cache addAll failed:', err)
     })
   )
   self.skipWaiting()
@@ -32,21 +34,32 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
 
+  const url = new URL(event.request.url)
+  const isAsset = /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/i.test(url.pathname)
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) return response
+
       return fetch(event.request).then((response) => {
         if (!response || response.status !== 200 || response.type === 'error') {
           return response
         }
+
         const responseToCache = response.clone()
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache).catch(() => {})
-        })
+        if (isAsset || url.pathname === '/' || url.pathname === '/index.html') {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache).catch((err) => {
+              console.error('Cache put failed:', err)
+            })
+          })
+        }
         return response
-      }).catch(() => {
+      }).catch((err) => {
+        console.error('Fetch failed:', err)
         return caches.match('/index.html')
       })
     })
   )
 })
+
