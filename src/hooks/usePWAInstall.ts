@@ -28,8 +28,8 @@ export function usePWAInstall() {
       const ua = navigator.userAgent.toLowerCase()
       const isIPhone = /iphone|ipod/.test(ua)
       const isIPad = /ipad/.test(ua) || (ua.includes('macintosh') && navigator.maxTouchPoints > 4)
-      const isSafari = /safari/.test(ua) && !/crios|fxios/.test(ua)
-      return (isIPhone || isIPad) && isSafari
+      const isWebKit = /safari|crios|fxios/.test(ua) && !/chrome|firefox/.test(ua.split('safari')[0])
+      return (isIPhone || isIPad) && isWebKit
     }
 
     const checkInstalled = () => {

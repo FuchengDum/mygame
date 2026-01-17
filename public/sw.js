@@ -43,6 +43,11 @@ self.addEventListener('fetch', (event) => {
   const isAsset = /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/i.test(url.pathname)
   const isNavigation = event.request.mode === 'navigate'
 
+  // 跨域请求直接走网络，不使用缓存
+  if (!isSameOrigin) {
+    return event.respondWith(fetch(event.request))
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) return response
@@ -53,7 +58,7 @@ self.addEventListener('fetch', (event) => {
         }
 
         const responseToCache = response.clone()
-        if (isSameOrigin && (isAsset || isNavigation)) {
+        if (isAsset || isNavigation) {
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch((err) => {
               console.error('Cache put failed:', err)
