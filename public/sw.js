@@ -2,7 +2,11 @@ const CACHE_NAME = 'mygame-v1'
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-96.png',
+  '/screenshot-540x720.png'
 ]
 
 self.addEventListener('install', (event) => {
@@ -61,6 +65,7 @@ self.addEventListener('fetch', (event) => {
         if (isNavigation) {
           return caches.match('/index.html')
         }
+        return new Response('Offline', { status: 503 })
       })
     })
   )
