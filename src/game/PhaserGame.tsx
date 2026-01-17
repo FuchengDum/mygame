@@ -23,7 +23,13 @@ export default function PhaserGame({ scene, onReady }: Props) {
       setTimeout(() => onReady?.(game), 100)
     })
 
+    const resizeObserver = new ResizeObserver(() => {
+      game.scale.refresh()
+    })
+    resizeObserver.observe(containerRef.current)
+
     return () => {
+      resizeObserver.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null
     }

@@ -11,6 +11,7 @@ import Leaderboard from '../components/snake/Leaderboard'
 import BoostButton from '../components/snake/BoostButton'
 import ResultModal from '../components/snake/ResultModal'
 import { useOrientation } from '../hooks/useOrientation'
+import { useViewport } from '../hooks/useViewport'
 
 type GameState = 'lobby' | 'playing' | 'paused' | 'gameover'
 
@@ -18,6 +19,7 @@ export default function SnakeGamePage() {
   const navigate = useNavigate()
   const { saveProgress, getProgress } = useGameStore()
   const isLandscape = useOrientation()
+  const { setResizeCallback } = useViewport()
 
   const [gameState, setGameState] = useState<GameState>('lobby')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
@@ -65,32 +67,82 @@ export default function SnakeGamePage() {
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return
 
-    const callbacks = callbacksRef.current
+    const parentEl = containerRef.current
+    let rafId = 0
+    let resizeObserver: ResizeObserver | null = null
 
-    class GameSnakeScene extends SnakeScene {
-      init() {
-        super.init({ callbacks })
-      }
+    const syncScaleToParent = () => {
+      const game = gameRef.current
+      if (!game) return
+      const w = parentEl.clientWidth
+      const h = parentEl.clientHeight
+      if (w === 0 || h === 0) return
+      game.scale.resize(w, h)
+      game.scale.refresh()
     }
 
-    const config = createGameConfig(containerRef.current, GameSnakeScene)
-    config.physics = { default: 'arcade', arcade: { gravity: { x: 0, y: 0 }, debug: false } }
-    const game = new Phaser.Game(config)
-    gameRef.current = game
+    const maybeInitGame = () => {
+      if (gameRef.current) return
 
-    game.events.once(Phaser.Core.Events.READY, () => {
-      setTimeout(() => {
-        const scene = game.scene.getScene('SnakeScene') as SnakeScene
-        sceneRef.current = scene
-      }, 100)
-    })
+      const { clientWidth, clientHeight } = parentEl
+      if (clientWidth === 0 || clientHeight === 0) return
+
+      const callbacks = callbacksRef.current
+
+      class GameSnakeScene extends SnakeScene {
+        init() {
+          super.init({ callbacks })
+        }
+      }
+
+      const config = createGameConfig(parentEl, GameSnakeScene, clientWidth, clientHeight)
+      config.physics = { default: 'arcade', arcade: { gravity: { x: 0, y: 0 }, debug: false } }
+      const game = new Phaser.Game(config)
+      gameRef.current = game
+
+      game.events.once(Phaser.Core.Events.READY, () => {
+        setTimeout(() => {
+          const scene = game.scene.getScene('SnakeScene') as SnakeScene
+          sceneRef.current = scene
+        }, 100)
+      })
+
+      setResizeCallback((width, height) => {
+        const g = gameRef.current
+        if (!g) return
+        g.scale.resize(width, height)
+        g.scale.refresh()
+      })
+
+      syncScaleToParent()
+      window.requestAnimationFrame(syncScaleToParent)
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        maybeInitGame()
+        syncScaleToParent()
+      })
+      resizeObserver.observe(parentEl)
+    }
+
+    const tick = () => {
+      maybeInitGame()
+      syncScaleToParent()
+      if (!gameRef.current) {
+        rafId = window.requestAnimationFrame(tick)
+      }
+    }
+    tick()
 
     return () => {
+      if (rafId) window.cancelAnimationFrame(rafId)
+      resizeObserver?.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null
       sceneRef.current = null
     }
-  }, [])
+  }, [setResizeCallback])
 
   // 开始游戏
   const startGame = useCallback((lobbyConfig: { skinId: string; nickname: string }) => {
@@ -106,9 +158,11 @@ export default function SnakeGamePage() {
     setStats({ length: 5, kills: 0, canBoost: false })
     setGameResult(null)
     setIsBoosting(false)
-    setPlayerId(`snake_1`) // 玩家总是第一个创建
+    setPlayerId(`snake_1`)
 
-    sceneRef.current?.startGame(config)
+    const scene = sceneRef.current
+    if (scene) scene.startGame(config)
+    else pendingStartConfigRef.current = config
   }, [])
 
   // 重新开始

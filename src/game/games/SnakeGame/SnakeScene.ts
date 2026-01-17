@@ -68,10 +68,40 @@ export class SnakeScene extends Phaser.Scene {
 
     this.gridGraphics = this.add.graphics()
     this.magnetGraphics = this.add.graphics()
-    this.magnetGraphics.setDepth(1) // 确保在蛇身下方 (蛇身通常是默认层级，后添加的会在上面)
+    this.magnetGraphics.setDepth(1)
     this.drawGrid()
     this.drawBorder()
     this.createMinimap()
+
+    // 监听 resize 事件
+    this.scale.on('resize', this.handleResize, this)
+    this.handleResize(this.scale.gameSize)
+  }
+
+  private handleResize(gameSize: Phaser.Structs.Size) {
+    const width = gameSize.width
+    const height = gameSize.height
+
+    this.cameras.resize(width, height)
+
+    // 重新绘制小地图
+    if (this.minimapBg) {
+      this.minimapBg.clear()
+      const mapWidth = 120
+      const mapHeight = 90
+      const padding = 10
+      const viewportWidth = width
+      const viewportHeight = height
+      this.minimapBg.fillStyle(0x000000, 0.6)
+      this.minimapBg.fillRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+      this.minimapBg.lineStyle(1, 0x00f5ff, 0.5)
+      this.minimapBg.strokeRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+    }
+
+    if (this.isPlaying) {
+      const playerPos = this.world.getPlayerPosition()
+      if (playerPos) this.cameras.main.centerOn(playerPos.x, playerPos.y)
+    }
   }
 
   private generateFoodTextures() {
