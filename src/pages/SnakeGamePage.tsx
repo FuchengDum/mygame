@@ -109,7 +109,8 @@ export default function SnakeGamePage() {
       gameRef.current = game
 
       game.events.once(Phaser.Core.Events.READY, () => {
-        const scene = game.scene.getScene('SnakeScene') as SnakeScene
+        const scene = game.scene.getScene('SnakeScene') as SnakeScene | null
+        if (!scene) return
         sceneRef.current = scene
         if (pendingStartConfigRef.current) {
           scene.startGame(pendingStartConfigRef.current)
@@ -117,11 +118,8 @@ export default function SnakeGamePage() {
         }
       })
 
-      setResizeCallback((width, height) => {
-        const g = gameRef.current
-        if (!g) return
-        g.scale.resize(width, height)
-        g.scale.refresh()
+      setResizeCallback(() => {
+        syncScaleToParent()
       })
 
       syncScaleToParent()

@@ -13,16 +13,18 @@ export function useViewport() {
 
   const updateViewport = useCallback(() => {
     const { width, height } = readViewportSize()
+    const w = Math.round(width)
+    const h = Math.round(height)
 
     if (
-      Math.abs(width - lastSizeRef.current.width) > 1 ||
-      Math.abs(height - lastSizeRef.current.height) > 1
+      Math.abs(w - lastSizeRef.current.width) >= 1 ||
+      Math.abs(h - lastSizeRef.current.height) >= 1
     ) {
-      lastSizeRef.current = { width, height }
-      callbackRef.current?.(width, height)
+      lastSizeRef.current = { width: w, height: h }
+      callbackRef.current?.(w, h)
 
-      document.documentElement.style.setProperty('--app-height', `${height}px`)
-      document.documentElement.style.setProperty('--app-width', `${width}px`)
+      document.documentElement.style.setProperty('--app-height', `${h}px`)
+      document.documentElement.style.setProperty('--app-width', `${w}px`)
     }
   }, [readViewportSize])
 
@@ -38,15 +40,21 @@ export function useViewport() {
     if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
     rafRef.current = undefined
     updateViewport()
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined
+      updateViewport()
+    })
   }, [updateViewport])
 
   const setResizeCallback = useCallback((callback: (width: number, height: number) => void) => {
     callbackRef.current = callback
     const { width, height } = readViewportSize()
-    lastSizeRef.current = { width, height }
-    callback(width, height)
-    document.documentElement.style.setProperty('--app-height', `${height}px`)
-    document.documentElement.style.setProperty('--app-width', `${width}px`)
+    const w = Math.round(width)
+    const h = Math.round(height)
+    lastSizeRef.current = { width: w, height: h }
+    callback(w, h)
+    document.documentElement.style.setProperty('--app-height', `${h}px`)
+    document.documentElement.style.setProperty('--app-width', `${w}px`)
   }, [readViewportSize])
 
   useEffect(() => {
