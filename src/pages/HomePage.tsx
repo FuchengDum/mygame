@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { useOrientation } from '../hooks/useOrientation'
+import PWAInstallPrompt from '../components/PWAInstallPrompt'
 import type { Game } from '../types/game'
 
 export default function HomePage() {
@@ -37,6 +38,7 @@ export default function HomePage() {
 
   return (
     <div className="h-full flex flex-col bg-dark-bg">
+      <PWAInstallPrompt />
       {/* 搜索栏 + 分类筛选 - 横屏时合并为一行 */}
       {isLandscape ? (
         <div className="p-2 flex gap-3 items-center">

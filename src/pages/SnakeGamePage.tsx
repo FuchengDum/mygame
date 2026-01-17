@@ -38,30 +38,35 @@ export default function SnakeGamePage() {
   const gameRef = useRef<Phaser.Game | null>(null)
   const sceneRef = useRef<SnakeScene | null>(null)
   const pendingStartConfigRef = useRef<GameConfig | null>(null)
+  const timeoutIdsRef = useRef<Set<number>>(new Set())
 
   // 回调引用
-  const callbacksRef = useRef<BattleCallbacks>({})
+  const callbacksRef = useRef<BattleCallbacks>({
+    onLeaderboardUpdate: () => {},
+    onStatsUpdate: () => {},
+    onGameOver: () => {},
+    onKill: () => {}
+  })
 
-  // 更新回调
-  callbacksRef.current = {
-    onLeaderboardUpdate: (data) => {
-      setLeaderboard(data)
-    },
-    onStatsUpdate: (s) => {
-      setStats(s)
-    },
-    onGameOver: (result) => {
-      setGameResult(result)
-      setGameState('gameover')
-      if (result.length > highScore) {
-        setHighScore(result.length)
-        saveProgress('snake', { highScore: result.length })
-      }
-    },
-    onKill: (victimName) => {
-      setKillNotification(`击杀 ${victimName}!`)
-      setTimeout(() => setKillNotification(null), 2000)
+  // 更新回调属性（不替换对象）
+  callbacksRef.current.onLeaderboardUpdate = (data) => {
+    setLeaderboard(data)
+  }
+  callbacksRef.current.onStatsUpdate = (s) => {
+    setStats(s)
+  }
+  callbacksRef.current.onGameOver = (result) => {
+    setGameResult(result)
+    setGameState('gameover')
+    if (result.length > highScore) {
+      setHighScore(result.length)
+      saveProgress('snake', { highScore: result.length })
     }
+  }
+  callbacksRef.current.onKill = (victimName) => {
+    setKillNotification(`击杀 ${victimName}!`)
+    const timeoutId = window.setTimeout(() => setKillNotification(null), 2000)
+    timeoutIdsRef.current.add(timeoutId)
   }
 
   // 初始化Phaser
@@ -70,9 +75,13 @@ export default function SnakeGamePage() {
 
     const parentEl = containerRef.current
     let rafId = 0
+    let resizeRafId = 0
+    let initRafId = 0
     let resizeObserver: ResizeObserver | null = null
     let lastW = 0
     let lastH = 0
+    let lastRoW = 0
+    let lastRoH = 0
 
     const syncScaleToParent = () => {
       const game = gameRef.current
@@ -106,31 +115,37 @@ export default function SnakeGamePage() {
       gameRef.current = game
 
       game.events.once(Phaser.Core.Events.READY, () => {
-        setTimeout(() => {
-          const scene = game.scene.getScene('SnakeScene') as SnakeScene
-          sceneRef.current = scene
-          if (pendingStartConfigRef.current) {
-            scene.startGame(pendingStartConfigRef.current)
-            pendingStartConfigRef.current = null
-          }
-        }, 100)
+        const scene = game.scene.getScene('SnakeScene') as SnakeScene | null
+        if (!scene) return
+        sceneRef.current = scene
+        if (pendingStartConfigRef.current) {
+          scene.startGame(pendingStartConfigRef.current)
+          pendingStartConfigRef.current = null
+        }
       })
 
-      setResizeCallback((width, height) => {
-        const g = gameRef.current
-        if (!g) return
-        g.scale.resize(width, height)
-        g.scale.refresh()
+      setResizeCallback(() => {
+        syncScaleToParent()
       })
 
       syncScaleToParent()
-      window.requestAnimationFrame(syncScaleToParent)
+      initRafId = window.requestAnimationFrame(syncScaleToParent)
     }
 
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
         maybeInitGame()
-        syncScaleToParent()
+        if (resizeRafId) return
+        resizeRafId = requestAnimationFrame(() => {
+          resizeRafId = 0
+          const w = parentEl.clientWidth
+          const h = parentEl.clientHeight
+          if (w !== lastRoW || h !== lastRoH) {
+            lastRoW = w
+            lastRoH = h
+            syncScaleToParent()
+          }
+        })
       })
       resizeObserver.observe(parentEl)
     }
@@ -146,6 +161,10 @@ export default function SnakeGamePage() {
 
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId)
+      if (resizeRafId) window.cancelAnimationFrame(resizeRafId)
+      if (initRafId) window.cancelAnimationFrame(initRafId)
+      timeoutIdsRef.current.forEach(id => window.clearTimeout(id))
+      timeoutIdsRef.current.clear()
       resizeObserver?.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null

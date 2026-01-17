@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 
 export function useViewport() {
-  const timeoutRef = useRef<number | undefined>(undefined)
+  const rafRef = useRef<number | undefined>(undefined)
   const lastSizeRef = useRef({ width: 0, height: 0 })
   const callbackRef = useRef<((width: number, height: number) => void) | null>(null)
 
@@ -13,62 +13,78 @@ export function useViewport() {
 
   const updateViewport = useCallback(() => {
     const { width, height } = readViewportSize()
+    const w = Math.round(width)
+    const h = Math.round(height)
 
     if (
-      Math.abs(width - lastSizeRef.current.width) > 1 ||
-      Math.abs(height - lastSizeRef.current.height) > 1
+      Math.abs(w - lastSizeRef.current.width) >= 1 ||
+      Math.abs(h - lastSizeRef.current.height) >= 1
     ) {
-      lastSizeRef.current = { width, height }
-      callbackRef.current?.(width, height)
-
-      document.documentElement.style.setProperty('--app-height', `${height}px`)
-      document.documentElement.style.setProperty('--app-width', `${width}px`)
+      lastSizeRef.current = { width: w, height: h }
+      document.documentElement.style.setProperty('--app-height', `${h}px`)
+      document.documentElement.style.setProperty('--app-width', `${w}px`)
+      callbackRef.current?.(w, h)
     }
   }, [readViewportSize])
 
-  const throttledUpdate = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(updateViewport, 50)
+  const scheduleUpdate = useCallback(() => {
+    if (rafRef.current !== undefined) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined
+      updateViewport()
+    })
+  }, [updateViewport])
+
+  const immediateUpdate = useCallback(() => {
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+    rafRef.current = undefined
+    updateViewport()
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined
+      updateViewport()
+    })
   }, [updateViewport])
 
   const setResizeCallback = useCallback((callback: (width: number, height: number) => void) => {
     callbackRef.current = callback
     const { width, height } = readViewportSize()
-    lastSizeRef.current = { width, height }
-    callback(width, height)
-    document.documentElement.style.setProperty('--app-height', `${height}px`)
-    document.documentElement.style.setProperty('--app-width', `${width}px`)
+    const w = Math.round(width)
+    const h = Math.round(height)
+    lastSizeRef.current = { width: w, height: h }
+    callback(w, h)
+    document.documentElement.style.setProperty('--app-height', `${h}px`)
+    document.documentElement.style.setProperty('--app-width', `${w}px`)
   }, [readViewportSize])
 
   useEffect(() => {
     updateViewport()
 
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', throttledUpdate)
-      window.visualViewport.addEventListener('scroll', throttledUpdate)
+      window.visualViewport.addEventListener('resize', scheduleUpdate)
+      window.visualViewport.addEventListener('scroll', scheduleUpdate)
     }
 
-    window.addEventListener('resize', throttledUpdate)
-    window.addEventListener('orientationchange', throttledUpdate)
-    window.addEventListener('pageshow', throttledUpdate)
-    window.addEventListener('visibilitychange', throttledUpdate)
+    window.addEventListener('resize', scheduleUpdate)
+    window.addEventListener('orientationchange', immediateUpdate)
+    window.addEventListener('pageshow', immediateUpdate)
+    window.addEventListener('visibilitychange', immediateUpdate)
 
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
       if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', throttledUpdate)
-        window.visualViewport.removeEventListener('scroll', throttledUpdate)
+        window.visualViewport.removeEventListener('resize', scheduleUpdate)
+        window.visualViewport.removeEventListener('scroll', scheduleUpdate)
       }
-      window.removeEventListener('resize', throttledUpdate)
-      window.removeEventListener('orientationchange', throttledUpdate)
-      window.removeEventListener('pageshow', throttledUpdate)
-      window.removeEventListener('visibilitychange', throttledUpdate)
+      window.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('orientationchange', immediateUpdate)
+      window.removeEventListener('pageshow', immediateUpdate)
+      window.removeEventListener('visibilitychange', immediateUpdate)
     }
-  }, [throttledUpdate, updateViewport])
+  }, [scheduleUpdate, immediateUpdate, updateViewport])
 
   return {
-    width: lastSizeRef.current.width || window.visualViewport?.width || window.innerWidth,
-    height: lastSizeRef.current.height || window.visualViewport?.height || window.innerHeight,
+    width: Math.round(lastSizeRef.current.width || window.visualViewport?.width || window.innerWidth),
+    height: Math.round(lastSizeRef.current.height || window.visualViewport?.height || window.innerHeight),
     setResizeCallback
   }
 }

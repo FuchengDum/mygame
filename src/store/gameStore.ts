@@ -27,11 +27,19 @@ export const useGameStore = create<GameState>()(
       setSearchQuery: (query) => set({ searchQuery: query }),
       setCategory: (category) => set({ category }),
       saveProgress: (gameId, data) => {
-        localStorage.setItem(`game_progress_${gameId}`, JSON.stringify(data))
+        try {
+          localStorage.setItem(`game_progress_${gameId}`, JSON.stringify(data))
+        } catch {
+          // 存储不可用，忽略
+        }
       },
       getProgress: (gameId) => {
-        const data = localStorage.getItem(`game_progress_${gameId}`)
-        return data ? JSON.parse(data) : null
+        try {
+          const data = localStorage.getItem(`game_progress_${gameId}`)
+          return data ? JSON.parse(data) : null
+        } catch {
+          return null
+        }
       },
     }),
     { name: 'game-store', partialize: (state) => ({ category: state.category }) }
