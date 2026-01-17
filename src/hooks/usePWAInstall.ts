@@ -29,13 +29,26 @@ export function usePWAInstall() {
       return /iphone|ipad|ipod/.test(ua) && /safari/.test(ua) && !/crios/.test(ua)
     }
 
-    setIsIOS(checkIOS())
+    const checkInstalled = () => {
+      return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+    }
+
+    const ios = checkIOS()
+    setIsIOS(ios)
+
+    const installed = checkInstalled()
+    setIsInstalled(installed)
+
+    // iOS 用户且未安装时，显示安装提示（仅首次）
+    if (ios && !installed) {
+      const dismissed = localStorage.getItem('pwa-install-dismissed')
+      if (!dismissed) {
+        setShowPrompt(true)
+      }
+    }
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
-
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true)
-    }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -56,6 +69,7 @@ export function usePWAInstall() {
 
   const dismiss = useCallback(() => {
     setShowPrompt(false)
+    localStorage.setItem('pwa-install-dismissed', 'true')
   }, [])
 
   return { showPrompt, isInstalled, install, dismiss, isIOS }
