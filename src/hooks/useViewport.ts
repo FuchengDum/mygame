@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 
 export function useViewport() {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>()
+  const timeoutRef = useRef<number | undefined>(undefined)
   const lastSizeRef = useRef({ width: 0, height: 0 })
   const callbackRef = useRef<((width: number, height: number) => void) | null>(null)
 
