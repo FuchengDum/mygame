@@ -38,30 +38,35 @@ export default function SnakeGamePage() {
   const gameRef = useRef<Phaser.Game | null>(null)
   const sceneRef = useRef<SnakeScene | null>(null)
   const pendingStartConfigRef = useRef<GameConfig | null>(null)
+  const timeoutIdsRef = useRef<Set<number>>(new Set())
 
   // 回调引用
-  const callbacksRef = useRef<BattleCallbacks>({})
+  const callbacksRef = useRef<BattleCallbacks>({
+    onLeaderboardUpdate: () => {},
+    onStatsUpdate: () => {},
+    onGameOver: () => {},
+    onKill: () => {}
+  })
 
-  // 更新回调
-  callbacksRef.current = {
-    onLeaderboardUpdate: (data) => {
-      setLeaderboard(data)
-    },
-    onStatsUpdate: (s) => {
-      setStats(s)
-    },
-    onGameOver: (result) => {
-      setGameResult(result)
-      setGameState('gameover')
-      if (result.length > highScore) {
-        setHighScore(result.length)
-        saveProgress('snake', { highScore: result.length })
-      }
-    },
-    onKill: (victimName) => {
-      setKillNotification(`击杀 ${victimName}!`)
-      setTimeout(() => setKillNotification(null), 2000)
+  // 更新回调属性（不替换对象）
+  callbacksRef.current.onLeaderboardUpdate = (data) => {
+    setLeaderboard(data)
+  }
+  callbacksRef.current.onStatsUpdate = (s) => {
+    setStats(s)
+  }
+  callbacksRef.current.onGameOver = (result) => {
+    setGameResult(result)
+    setGameState('gameover')
+    if (result.length > highScore) {
+      setHighScore(result.length)
+      saveProgress('snake', { highScore: result.length })
     }
+  }
+  callbacksRef.current.onKill = (victimName) => {
+    setKillNotification(`击杀 ${victimName}!`)
+    const timeoutId = window.setTimeout(() => setKillNotification(null), 2000)
+    timeoutIdsRef.current.add(timeoutId)
   }
 
   // 初始化Phaser
@@ -71,6 +76,7 @@ export default function SnakeGamePage() {
     const parentEl = containerRef.current
     let rafId = 0
     let resizeRafId = 0
+    let initRafId = 0
     let resizeObserver: ResizeObserver | null = null
     let lastW = 0
     let lastH = 0
@@ -123,7 +129,7 @@ export default function SnakeGamePage() {
       })
 
       syncScaleToParent()
-      window.requestAnimationFrame(syncScaleToParent)
+      initRafId = window.requestAnimationFrame(syncScaleToParent)
     }
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -156,6 +162,9 @@ export default function SnakeGamePage() {
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId)
       if (resizeRafId) window.cancelAnimationFrame(resizeRafId)
+      if (initRafId) window.cancelAnimationFrame(initRafId)
+      timeoutIdsRef.current.forEach(id => window.clearTimeout(id))
+      timeoutIdsRef.current.clear()
       resizeObserver?.disconnect()
       gameRef.current?.destroy(true)
       gameRef.current = null

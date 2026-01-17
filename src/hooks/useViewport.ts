@@ -21,10 +21,9 @@ export function useViewport() {
       Math.abs(h - lastSizeRef.current.height) >= 1
     ) {
       lastSizeRef.current = { width: w, height: h }
-      callbackRef.current?.(w, h)
-
       document.documentElement.style.setProperty('--app-height', `${h}px`)
       document.documentElement.style.setProperty('--app-width', `${w}px`)
+      callbackRef.current?.(w, h)
     }
   }, [readViewportSize])
 
@@ -84,8 +83,8 @@ export function useViewport() {
   }, [scheduleUpdate, immediateUpdate, updateViewport])
 
   return {
-    width: lastSizeRef.current.width || window.visualViewport?.width || window.innerWidth,
-    height: lastSizeRef.current.height || window.visualViewport?.height || window.innerHeight,
+    width: Math.round(lastSizeRef.current.width || window.visualViewport?.width || window.innerWidth),
+    height: Math.round(lastSizeRef.current.height || window.visualViewport?.height || window.innerHeight),
     setResizeCallback
   }
 }
