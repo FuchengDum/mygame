@@ -9,6 +9,7 @@ export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
   const [showPrompt, setShowPrompt] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -23,6 +24,12 @@ export function usePWAInstall() {
       setDeferredPrompt(null)
     }
 
+    const checkIOS = () => {
+      const ua = navigator.userAgent.toLowerCase()
+      return /iphone|ipad|ipod/.test(ua) && /safari/.test(ua) && !/crios/.test(ua)
+    }
+
+    setIsIOS(checkIOS())
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
 
@@ -51,5 +58,6 @@ export function usePWAInstall() {
     setShowPrompt(false)
   }, [])
 
-  return { showPrompt, isInstalled, install, dismiss }
+  return { showPrompt, isInstalled, install, dismiss, isIOS }
 }
+

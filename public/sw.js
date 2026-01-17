@@ -36,6 +36,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url)
   const isAsset = /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/i.test(url.pathname)
+  const isNavigation = event.request.mode === 'navigate'
 
   event.respondWith(
     caches.match(event.request).then((response) => {
@@ -47,7 +48,7 @@ self.addEventListener('fetch', (event) => {
         }
 
         const responseToCache = response.clone()
-        if (isAsset || url.pathname === '/' || url.pathname === '/index.html') {
+        if (isAsset || isNavigation) {
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch((err) => {
               console.error('Cache put failed:', err)
@@ -57,9 +58,12 @@ self.addEventListener('fetch', (event) => {
         return response
       }).catch((err) => {
         console.error('Fetch failed:', err)
-        return caches.match('/index.html')
+        if (isNavigation) {
+          return caches.match('/index.html')
+        }
       })
     })
   )
 })
+
 
