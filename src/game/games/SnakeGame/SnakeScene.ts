@@ -10,7 +10,7 @@ import { getSkinById } from './config/skins'
 // 渲染用的蛇段
 interface SnakeGraphics {
   snakeId: string
-  segments: Phaser.GameObjects.Arc[]
+  segments: Phaser.GameObjects.Sprite[]
   nameText?: Phaser.GameObjects.Text
 }
 
@@ -39,6 +39,7 @@ export class SnakeScene extends Phaser.Scene {
   // 渲染对象
   private snakeGraphicsMap: Map<string, SnakeGraphics> = new Map()
   private foodGraphicsMap: Map<string, FoodGraphics> = new Map()
+  private segmentPool: Phaser.GameObjects.Sprite[] = []
 
   private gridGraphics?: Phaser.GameObjects.Graphics
   private magnetGraphics?: Phaser.GameObjects.Graphics
@@ -65,6 +66,9 @@ export class SnakeScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
     this.generateFoodTextures()
+
+    // 创建静态渐变背景
+    this.createBackground()
 
     this.gridGraphics = this.add.graphics()
     this.magnetGraphics = this.add.graphics()
@@ -107,6 +111,13 @@ export class SnakeScene extends Phaser.Scene {
   private generateFoodTextures() {
     const size = 24
     const r = size / 2
+
+    // 蛇段圆形纹理（用于Sprite化）
+    const segmentG = this.make.graphics({ x: 0, y: 0 })
+    segmentG.fillStyle(0xffffff)
+    segmentG.fillCircle(r, r, r)
+    segmentG.generateTexture('snake_segment', size, size)
+    segmentG.destroy()
 
     // speed - 闪电
     const speedG = this.make.graphics({ x: 0, y: 0 })
@@ -183,6 +194,14 @@ export class SnakeScene extends Phaser.Scene {
     this.minimapOverlay = this.add.graphics()
     this.minimapOverlay.setScrollFactor(0)
     this.minimapOverlay.setDepth(101)
+  }
+
+  private createBackground() {
+    // 创建静态渐变背景（深蓝到黑色）
+    const bg = this.add.graphics()
+    bg.fillGradientStyle(0x0a0a1e, 0x0a0a1e, 0x000000, 0x000000, 1)
+    bg.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+    bg.setDepth(-2) // 确保在最底层
   }
 
   private drawGrid() {
@@ -353,10 +372,13 @@ export class SnakeScene extends Phaser.Scene {
     const aliveSnakes = this.world.getAliveSnakes()
     const aliveIds = new Set(aliveSnakes.map(s => s.state.id))
 
-    // 移除已死亡蛇的渲染
+    // 移除已死亡蛇的渲染（回收到对象池）
     for (const [id, sg] of this.snakeGraphicsMap) {
       if (!aliveIds.has(id)) {
-        sg.segments.forEach(s => s.destroy())
+        sg.segments.forEach(s => {
+          s.setVisible(false)
+          this.segmentPool.push(s)
+        })
         sg.nameText?.destroy()
         this.snakeGraphicsMap.delete(id)
       }
@@ -378,35 +400,44 @@ export class SnakeScene extends Phaser.Scene {
       this.snakeGraphicsMap.set(state.id, sg)
     }
 
-    // 同步段数
+    // 同步段数（使用对象池）
     while (sg.segments.length < state.segments.length) {
-      const circle = this.add.circle(0, 0, 10, skin.headColor)
-      sg.segments.push(circle)
+      const sprite = this.segmentPool.pop() || this.add.sprite(0, 0, 'snake_segment')
+      sprite.setVisible(true)
+      sg.segments.push(sprite)
     }
     while (sg.segments.length > state.segments.length) {
-      sg.segments.pop()?.destroy()
+      const sprite = sg.segments.pop()
+      if (sprite) {
+        sprite.setVisible(false)
+        this.segmentPool.push(sprite)
+      }
     }
+
+    // 优化：每蛇每帧计算一次无敌闪烁alpha
+    const invincibleAlpha = snake.isInvincible ? 0.5 + Math.sin(this.time.now / 100) * 0.3 : 1
 
     // 更新每个段的位置和样式
     for (let i = 0; i < state.segments.length; i++) {
       const seg = state.segments[i]
-      const gfx = sg.segments[i]
+      const sprite = sg.segments[i]
       const isHead = i === 0
 
-      gfx.setPosition(seg.x, seg.y)
+      sprite.setPosition(seg.x, seg.y)
 
       const radius = isHead ? 12 : 10 - Math.min(i * 0.3, 4)
-      gfx.setRadius(radius)
+      sprite.setScale(radius / 12) // 纹理半径是12
 
       const color = this.getSegmentColor(skin, i)
-      const alpha = snake.isInvincible ? 0.5 + Math.sin(Date.now() / 100) * 0.3 : Math.max(0.6, 1 - i * 0.02)
-      gfx.setFillStyle(color, alpha)
+      sprite.setTint(color)
+
+      const baseAlpha = Math.max(0.6, 1 - i * 0.02)
+      sprite.setAlpha(baseAlpha * invincibleAlpha)
 
       if (isHead) {
-        gfx.setStrokeStyle(2, 0xffffff, 0.5)
         // 加速时发光
         if (state.isBoosting) {
-          gfx.setStrokeStyle(3, 0xffff00, 0.8)
+          sprite.setTint(0xffff00)
         }
       }
     }
