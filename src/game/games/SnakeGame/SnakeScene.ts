@@ -281,14 +281,41 @@ export class SnakeScene extends Phaser.Scene {
     // 渲染磁铁特效
     this.renderMagnetEffects()
 
-    // 更新相机跟随
+    // 更新相机跟随（智能偏移避免UI遮挡）
     const playerPos = this.world.getPlayerPosition()
     if (playerPos) {
-      this.cameras.main.centerOn(playerPos.x, playerPos.y)
+      this.updateCameraFollow(playerPos)
     }
 
     // 更新小地图
     this.updateMinimap()
+  }
+
+  private updateCameraFollow(playerPos: { x: number; y: number }) {
+    const viewport = { w: this.cameras.main.width, h: this.cameras.main.height }
+
+    // UI安全边距
+    const safeMargin = {
+      left: 150,   // 排行榜宽度
+      top: 80,     // 暂停按钮高度
+      right: 140,  // 小地图+加速按钮
+      bottom: 200  // 摇杆区域
+    }
+
+    // 计算蛇头在屏幕上的相对位置
+    const screenX = playerPos.x - this.cameras.main.scrollX
+    const screenY = playerPos.y - this.cameras.main.scrollY
+
+    // 智能偏移
+    let offsetX = 0
+    let offsetY = 0
+
+    if (screenX < safeMargin.left) offsetX = 30
+    if (screenX > viewport.w - safeMargin.right) offsetX = -30
+    if (screenY < safeMargin.top) offsetY = 30
+    if (screenY > viewport.h - safeMargin.bottom) offsetY = -30
+
+    this.cameras.main.centerOn(playerPos.x + offsetX, playerPos.y + offsetY)
   }
 
   private renderMagnetEffects() {
@@ -478,7 +505,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private updateMinimap() {
-    if (!this.minimapOverlay) return
+    if (!this.minimapOverlay || !this.minimapBg) return
 
     const mapWidth = 120
     const mapHeight = 90
@@ -488,6 +515,20 @@ export class SnakeScene extends Phaser.Scene {
     const mapX0 = viewportWidth - mapWidth - padding
     const mapY0 = viewportHeight - mapHeight - padding - 80
     const now = this.time.now
+
+    // 动态透明度：根据玩家位置调整
+    const playerPos = this.world.getPlayerPosition()
+    if (playerPos) {
+      const screenX = (playerPos.x - this.cameras.main.scrollX) * this.cameras.main.zoom
+      const screenY = (playerPos.y - this.cameras.main.scrollY) * this.cameras.main.zoom
+
+      // 判断玩家是否接近小地图区域
+      const isNearMinimap = screenX > viewportWidth - 150 && screenY > viewportHeight - 200
+      const targetAlpha = isNearMinimap ? 0.9 : 0.6
+
+      this.minimapBg.setAlpha(targetAlpha)
+      this.minimapOverlay.setAlpha(targetAlpha)
+    }
 
     // 降频绘制
     if (now - this.minimapLastDrawAtMs < 100) return
@@ -529,9 +570,13 @@ export class SnakeScene extends Phaser.Scene {
   // 暂停/恢复
   pauseGame() {
     this.isPlaying = false
+    // 暂停场景的时间系统和 Tween
+    this.scene.pause()
   }
 
   resumeGame() {
     this.isPlaying = true
+    // 恢复场景
+    this.scene.resume()
   }
 }

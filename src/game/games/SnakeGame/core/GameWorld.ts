@@ -28,6 +28,7 @@ export class GameWorld {
   private callbacks: GameCallbacks = {}
   private startTime: number = 0
   private bestRank: number = 999
+  private pendingRespawns: Array<{ snake: SnakeEntity; respawnTime: number }> = []
 
   private leaderboardThrottle = 0
   private statsThrottle = 0
@@ -144,6 +145,17 @@ export class GameWorld {
         this.checkSnakeCollision(snake)
       }
     }
+
+    // 处理待重生的AI
+    const now = Date.now()
+    this.pendingRespawns = this.pendingRespawns.filter(({ snake, respawnTime }) => {
+      if (now >= respawnTime && !snake.state.alive) {
+        const pos = this.getRandomSpawnPosition()
+        snake.respawn(pos.x, pos.y)
+        return false // 移除已重生的
+      }
+      return true // 保留未到时间的
+    })
 
     // 维持食物数量
     while (this.foods.length < 150) {
@@ -313,13 +325,11 @@ export class GameWorld {
       }
       this.callbacks.onGameOver?.(result)
     } else {
-      // AI死亡后重生
-      setTimeout(() => {
-        if (!snake.state.alive) {
-          const pos = this.getRandomSpawnPosition()
-          snake.respawn(pos.x, pos.y)
-        }
-      }, 3000)
+      // AI死亡后加入重生队列
+      this.pendingRespawns.push({
+        snake,
+        respawnTime: Date.now() + 3000
+      })
     }
   }
 
