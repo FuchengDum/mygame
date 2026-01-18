@@ -36,10 +36,10 @@ export default function SnakeGamePage() {
 
   // UI动态透明度状态
   const [uiOpacity, setUiOpacity] = useState({
-    leaderboard: 0.5,
+    leaderboard: 0.75,
     pause: 1,
-    minimap: 0.6,
-    stats: 0.6
+    minimap: 0.7,
+    stats: 0.75
   })
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -201,18 +201,27 @@ export default function SnakeGamePage() {
       const viewportWidth = camera.width
       const viewportHeight = camera.height
 
-      // 计算各UI元素的透明度
+      // 计算各UI元素的透明度（提高最低阈值保证可读性）
       const newOpacity = {
         // 左上角状态和排行榜区域 (150px宽 x 300px高)
-        stats: screenX < 150 && screenY < 100 ? 0.9 : 0.6,
-        leaderboard: screenX < 150 && screenY > 80 && screenY < 300 ? 0.9 : 0.5,
-        // 顶部暂停按钮 (居中，80px高)
-        pause: screenY < 80 && screenX > viewportWidth / 2 - 100 && screenX < viewportWidth / 2 + 100 ? 0 : 1,
+        stats: screenX < 150 && screenY < 100 ? 0.95 : 0.75,
+        leaderboard: screenX < 150 && screenY > 80 && screenY < 300 ? 0.95 : 0.75,
+        // 顶部暂停按钮 (居中，80px高) - 保持最低可见度
+        pause: screenY < 80 && screenX > viewportWidth / 2 - 100 && screenX < viewportWidth / 2 + 100 ? 0.3 : 1,
         // 右下角小地图区域 (150px宽 x 200px高)
-        minimap: screenX > viewportWidth - 150 && screenY > viewportHeight - 200 ? 0.9 : 0.6
+        minimap: screenX > viewportWidth - 150 && screenY > viewportHeight - 200 ? 0.9 : 0.7
       }
 
-      setUiOpacity(newOpacity)
+      // 仅在值变化时更新，避免不必要的重渲染
+      setUiOpacity(prev => {
+        if (prev.stats === newOpacity.stats &&
+            prev.leaderboard === newOpacity.leaderboard &&
+            prev.pause === newOpacity.pause &&
+            prev.minimap === newOpacity.minimap) {
+          return prev
+        }
+        return newOpacity
+      })
     }
 
     const interval = setInterval(checkProximity, 100)

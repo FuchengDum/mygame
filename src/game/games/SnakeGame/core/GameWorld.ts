@@ -28,7 +28,8 @@ export class GameWorld {
   private callbacks: GameCallbacks = {}
   private startTime: number = 0
   private bestRank: number = 999
-  private pendingRespawns: Array<{ snake: SnakeEntity; respawnTime: number }> = []
+  private gameElapsedMs: number = 0
+  private pendingRespawns: Array<{ snake: SnakeEntity; respawnAtElapsed: number }> = []
 
   private leaderboardThrottle = 0
   private statsThrottle = 0
@@ -38,6 +39,8 @@ export class GameWorld {
     this.snakes = []
     this.foods = []
     this.events = []
+    this.pendingRespawns = []
+    this.gameElapsedMs = 0
     this.startTime = Date.now()
     this.bestRank = 999
 
@@ -117,6 +120,7 @@ export class GameWorld {
   // 主更新循环
   update(deltaMs: number) {
     this.events = []
+    this.gameElapsedMs += deltaMs
 
     // 更新空间哈希
     this.rebuildSpatialHash()
@@ -147,9 +151,8 @@ export class GameWorld {
     }
 
     // 处理待重生的AI
-    const now = Date.now()
-    this.pendingRespawns = this.pendingRespawns.filter(({ snake, respawnTime }) => {
-      if (now >= respawnTime && !snake.state.alive) {
+    this.pendingRespawns = this.pendingRespawns.filter(({ snake, respawnAtElapsed }) => {
+      if (this.gameElapsedMs >= respawnAtElapsed && !snake.state.alive) {
         const pos = this.getRandomSpawnPosition()
         snake.respawn(pos.x, pos.y)
         return false // 移除已重生的
@@ -328,7 +331,7 @@ export class GameWorld {
       // AI死亡后加入重生队列
       this.pendingRespawns.push({
         snake,
-        respawnTime: Date.now() + 3000
+        respawnAtElapsed: this.gameElapsedMs + 3000
       })
     }
   }
