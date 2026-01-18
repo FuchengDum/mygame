@@ -10,7 +10,7 @@ import { getSkinById } from './config/skins'
 // 渲染用的蛇段
 interface SnakeGraphics {
   snakeId: string
-  segments: Phaser.GameObjects.Arc[]
+  segments: Phaser.GameObjects.Sprite[]
   nameText?: Phaser.GameObjects.Text
 }
 
@@ -39,6 +39,7 @@ export class SnakeScene extends Phaser.Scene {
   // 渲染对象
   private snakeGraphicsMap: Map<string, SnakeGraphics> = new Map()
   private foodGraphicsMap: Map<string, FoodGraphics> = new Map()
+  private segmentPool: Phaser.GameObjects.Sprite[] = []
 
   private gridGraphics?: Phaser.GameObjects.Graphics
   private magnetGraphics?: Phaser.GameObjects.Graphics
@@ -65,6 +66,9 @@ export class SnakeScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
     this.generateFoodTextures()
+
+    // 创建静态渐变背景
+    this.createBackground()
 
     this.gridGraphics = this.add.graphics()
     this.magnetGraphics = this.add.graphics()
@@ -107,6 +111,13 @@ export class SnakeScene extends Phaser.Scene {
   private generateFoodTextures() {
     const size = 24
     const r = size / 2
+
+    // 蛇段圆形纹理（用于Sprite化）
+    const segmentG = this.make.graphics({ x: 0, y: 0 })
+    segmentG.fillStyle(0xffffff)
+    segmentG.fillCircle(r, r, r)
+    segmentG.generateTexture('snake_segment', size, size)
+    segmentG.destroy()
 
     // speed - 闪电
     const speedG = this.make.graphics({ x: 0, y: 0 })
@@ -183,6 +194,14 @@ export class SnakeScene extends Phaser.Scene {
     this.minimapOverlay = this.add.graphics()
     this.minimapOverlay.setScrollFactor(0)
     this.minimapOverlay.setDepth(101)
+  }
+
+  private createBackground() {
+    // 创建静态渐变背景（深蓝到黑色）
+    const bg = this.add.graphics()
+    bg.fillGradientStyle(0x0a0a1e, 0x0a0a1e, 0x000000, 0x000000, 1)
+    bg.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+    bg.setDepth(-2) // 确保在最底层
   }
 
   private drawGrid() {
@@ -281,14 +300,41 @@ export class SnakeScene extends Phaser.Scene {
     // 渲染磁铁特效
     this.renderMagnetEffects()
 
-    // 更新相机跟随
+    // 更新相机跟随（智能偏移避免UI遮挡）
     const playerPos = this.world.getPlayerPosition()
     if (playerPos) {
-      this.cameras.main.centerOn(playerPos.x, playerPos.y)
+      this.updateCameraFollow(playerPos)
     }
 
     // 更新小地图
     this.updateMinimap()
+  }
+
+  private updateCameraFollow(playerPos: { x: number; y: number }) {
+    const viewport = { w: this.cameras.main.width, h: this.cameras.main.height }
+
+    // UI安全边距
+    const safeMargin = {
+      left: 150,   // 排行榜宽度
+      top: 80,     // 暂停按钮高度
+      right: 140,  // 小地图+加速按钮
+      bottom: 200  // 摇杆区域
+    }
+
+    // 计算蛇头在屏幕上的相对位置
+    const screenX = playerPos.x - this.cameras.main.scrollX
+    const screenY = playerPos.y - this.cameras.main.scrollY
+
+    // 智能偏移
+    let offsetX = 0
+    let offsetY = 0
+
+    if (screenX < safeMargin.left) offsetX = 30
+    if (screenX > viewport.w - safeMargin.right) offsetX = -30
+    if (screenY < safeMargin.top) offsetY = 30
+    if (screenY > viewport.h - safeMargin.bottom) offsetY = -30
+
+    this.cameras.main.centerOn(playerPos.x + offsetX, playerPos.y + offsetY)
   }
 
   private renderMagnetEffects() {
@@ -326,10 +372,13 @@ export class SnakeScene extends Phaser.Scene {
     const aliveSnakes = this.world.getAliveSnakes()
     const aliveIds = new Set(aliveSnakes.map(s => s.state.id))
 
-    // 移除已死亡蛇的渲染
+    // 移除已死亡蛇的渲染（回收到对象池）
     for (const [id, sg] of this.snakeGraphicsMap) {
       if (!aliveIds.has(id)) {
-        sg.segments.forEach(s => s.destroy())
+        sg.segments.forEach(s => {
+          s.setVisible(false)
+          this.segmentPool.push(s)
+        })
         sg.nameText?.destroy()
         this.snakeGraphicsMap.delete(id)
       }
@@ -351,35 +400,52 @@ export class SnakeScene extends Phaser.Scene {
       this.snakeGraphicsMap.set(state.id, sg)
     }
 
-    // 同步段数
+    // 同步段数（使用对象池）
     while (sg.segments.length < state.segments.length) {
-      const circle = this.add.circle(0, 0, 10, skin.headColor)
-      sg.segments.push(circle)
+      const sprite = this.segmentPool.pop() || this.add.sprite(0, 0, 'snake_segment')
+      sprite.setVisible(true)
+      sg.segments.push(sprite)
     }
     while (sg.segments.length > state.segments.length) {
-      sg.segments.pop()?.destroy()
+      const sprite = sg.segments.pop()
+      if (sprite) {
+        sprite.setVisible(false)
+        this.segmentPool.push(sprite)
+      }
     }
+
+    // 优化：每蛇每帧计算一次无敌闪烁alpha
+    const invincibleAlpha = snake.isInvincible ? 0.5 + Math.sin(this.time.now / 100) * 0.3 : 1
 
     // 更新每个段的位置和样式
     for (let i = 0; i < state.segments.length; i++) {
       const seg = state.segments[i]
-      const gfx = sg.segments[i]
+      const sprite = sg.segments[i]
       const isHead = i === 0
 
-      gfx.setPosition(seg.x, seg.y)
+      sprite.setPosition(seg.x, seg.y)
 
       const radius = isHead ? 12 : 10 - Math.min(i * 0.3, 4)
-      gfx.setRadius(radius)
+      sprite.setScale(radius / 12) // 纹理半径是12
 
       const color = this.getSegmentColor(skin, i)
-      const alpha = snake.isInvincible ? 0.5 + Math.sin(Date.now() / 100) * 0.3 : Math.max(0.6, 1 - i * 0.02)
-      gfx.setFillStyle(color, alpha)
+      sprite.setTint(color)
+
+      const baseAlpha = Math.max(0.6, 1 - i * 0.02)
+      sprite.setAlpha(baseAlpha * invincibleAlpha)
 
       if (isHead) {
-        gfx.setStrokeStyle(2, 0xffffff, 0.5)
-        // 加速时发光
+        // 蛇头脉冲效果
+        const pulseScale = 1 + Math.sin(this.time.now / 200) * 0.1
+        sprite.setScale((radius / 12) * pulseScale)
+
+        // 加速时发光（更明显的黄色）
         if (state.isBoosting) {
-          gfx.setStrokeStyle(3, 0xffff00, 0.8)
+          sprite.setTint(0xffff00)
+          sprite.setAlpha(1) // 加速时完全不透明
+        } else {
+          // 蛇头稍微亮一些
+          sprite.setAlpha(1)
         }
       }
     }
@@ -478,7 +544,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private updateMinimap() {
-    if (!this.minimapOverlay) return
+    if (!this.minimapOverlay || !this.minimapBg) return
 
     const mapWidth = 120
     const mapHeight = 90
@@ -488,6 +554,20 @@ export class SnakeScene extends Phaser.Scene {
     const mapX0 = viewportWidth - mapWidth - padding
     const mapY0 = viewportHeight - mapHeight - padding - 80
     const now = this.time.now
+
+    // 动态透明度：根据玩家位置调整
+    const playerPos = this.world.getPlayerPosition()
+    if (playerPos) {
+      const screenX = (playerPos.x - this.cameras.main.scrollX) * this.cameras.main.zoom
+      const screenY = (playerPos.y - this.cameras.main.scrollY) * this.cameras.main.zoom
+
+      // 判断玩家是否接近小地图区域
+      const isNearMinimap = screenX > viewportWidth - 150 && screenY > viewportHeight - 200
+      const targetAlpha = isNearMinimap ? 0.9 : 0.6
+
+      this.minimapBg.setAlpha(targetAlpha)
+      this.minimapOverlay.setAlpha(targetAlpha)
+    }
 
     // 降频绘制
     if (now - this.minimapLastDrawAtMs < 100) return
@@ -529,9 +609,13 @@ export class SnakeScene extends Phaser.Scene {
   // 暂停/恢复
   pauseGame() {
     this.isPlaying = false
+    // 暂停场景的时间系统和 Tween
+    this.scene.pause()
   }
 
   resumeGame() {
     this.isPlaying = true
+    // 恢复场景
+    this.scene.resume()
   }
 }

@@ -34,6 +34,14 @@ export default function SnakeGamePage() {
     return saved?.highScore || 0
   })
 
+  // UI动态透明度状态
+  const [uiOpacity, setUiOpacity] = useState({
+    leaderboard: 0.75,
+    pause: 1,
+    minimap: 0.7,
+    stats: 0.75
+  })
+
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
   const sceneRef = useRef<SnakeScene | null>(null)
@@ -172,6 +180,54 @@ export default function SnakeGamePage() {
     }
   }, [setResizeCallback])
 
+  // UI动态透明度检测
+  useEffect(() => {
+    if (gameState !== 'playing') return
+
+    const checkProximity = () => {
+      const scene = sceneRef.current
+      if (!scene) return
+
+      const playerPos = scene['world']?.getPlayerPosition?.()
+      if (!playerPos) return
+
+      const camera = scene.cameras.main
+      if (!camera) return
+
+      // 转换为屏幕坐标
+      const screenX = (playerPos.x - camera.scrollX) * camera.zoom
+      const screenY = (playerPos.y - camera.scrollY) * camera.zoom
+
+      const viewportWidth = camera.width
+      const viewportHeight = camera.height
+
+      // 计算各UI元素的透明度（提高最低阈值保证可读性）
+      const newOpacity = {
+        // 左上角状态和排行榜区域 (150px宽 x 300px高)
+        stats: screenX < 150 && screenY < 100 ? 0.95 : 0.75,
+        leaderboard: screenX < 150 && screenY > 80 && screenY < 300 ? 0.95 : 0.75,
+        // 顶部暂停按钮 (居中，80px高) - 保持最低可见度
+        pause: screenY < 80 && screenX > viewportWidth / 2 - 100 && screenX < viewportWidth / 2 + 100 ? 0.3 : 1,
+        // 右下角小地图区域 (150px宽 x 200px高)
+        minimap: screenX > viewportWidth - 150 && screenY > viewportHeight - 200 ? 0.9 : 0.7
+      }
+
+      // 仅在值变化时更新，避免不必要的重渲染
+      setUiOpacity(prev => {
+        if (prev.stats === newOpacity.stats &&
+            prev.leaderboard === newOpacity.leaderboard &&
+            prev.pause === newOpacity.pause &&
+            prev.minimap === newOpacity.minimap) {
+          return prev
+        }
+        return newOpacity
+      })
+    }
+
+    const interval = setInterval(checkProximity, 100)
+    return () => clearInterval(interval)
+  }, [gameState])
+
   // 开始游戏
   const startGame = useCallback((lobbyConfig: { skinId: string; nickname: string }) => {
     const config: GameConfig = {
@@ -249,22 +305,28 @@ export default function SnakeGamePage() {
       {gameState === 'playing' && (
         <>
           {/* 左上角状态 */}
-          <div className="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-2 rounded-lg border border-cyan-400/30 z-10">
-            <div className="text-cyan-400 font-mono text-lg">长度: {stats.length}</div>
-            <div className="text-red-400 text-sm">击杀: {stats.kills}</div>
+          <div
+            className="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-2 rounded-lg border border-cyan-400/30 shadow-lg shadow-cyan-500/20 z-10 transition-opacity duration-200"
+            style={{ opacity: uiOpacity.stats }}
+          >
+            <div className="text-cyan-400 font-mono text-lg font-bold">长度: {stats.length}</div>
+            <div className="text-red-400 text-sm font-semibold">击杀: {stats.kills}</div>
           </div>
 
           {/* 排行榜 */}
-          <Leaderboard
-            data={leaderboard}
-            playerId={playerId}
-            isLandscape={isLandscape}
-          />
+          <div style={{ opacity: uiOpacity.leaderboard, transition: 'opacity 0.2s' }}>
+            <Leaderboard
+              data={leaderboard}
+              playerId={playerId}
+              isLandscape={isLandscape}
+            />
+          </div>
 
           {/* 暂停按钮 */}
           <button
             onClick={togglePause}
-            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 text-white z-10"
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 shadow-lg shadow-purple-500/20 text-white z-10 transition-all duration-200 hover:bg-purple-500/20 hover:border-purple-400/50 active:scale-95"
+            style={{ opacity: uiOpacity.pause }}
             aria-label="暂停"
           >
             ⏸️

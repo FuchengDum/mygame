@@ -24,8 +24,9 @@ export default function Leaderboard({ data, playerId, isLandscape = false }: Pro
     <div className={`
       absolute z-10 bg-black/50 backdrop-blur-sm rounded-lg p-2
       left-4 top-24 w-28
+      border border-cyan-400/30 shadow-lg shadow-cyan-500/20
     `}>
-      <div className="text-xs text-gray-400 mb-1 text-center border-b border-white/10 pb-1">
+      <div className="text-xs text-cyan-400 mb-1 text-center border-b border-cyan-400/30 pb-1 font-bold">
         排行榜
       </div>
 
@@ -59,10 +60,19 @@ function LeaderboardRow({
   entry: LeaderboardEntry
   isPlayer: boolean
 }) {
+  // 前三名特殊颜色
+  const getRankColor = () => {
+    if (isPlayer) return 'bg-cyan-500/20 text-cyan-400 font-bold border border-cyan-400/30'
+    if (entry.rank === 1) return 'text-yellow-400 font-bold'
+    if (entry.rank === 2) return 'text-gray-300 font-bold'
+    if (entry.rank === 3) return 'text-orange-400 font-bold'
+    return 'text-gray-400'
+  }
+
   return (
     <div className={`
       flex items-center text-xs gap-1 px-1 py-0.5 rounded
-      ${isPlayer ? 'bg-cyan-500/20 text-cyan-400 font-bold' : 'text-gray-300'}
+      ${getRankColor()}
     `}>
       <span className="w-4 text-right">{entry.rank}</span>
       <span className="flex-1 truncate max-w-12">
