@@ -306,11 +306,11 @@ export default function SnakeGamePage() {
         <>
           {/* 左上角状态 */}
           <div
-            className="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-2 rounded-lg border border-cyan-400/30 z-10 transition-opacity duration-200"
+            className="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-2 rounded-lg border border-cyan-400/30 shadow-lg shadow-cyan-500/20 z-10 transition-opacity duration-200"
             style={{ opacity: uiOpacity.stats }}
           >
-            <div className="text-cyan-400 font-mono text-lg">长度: {stats.length}</div>
-            <div className="text-red-400 text-sm">击杀: {stats.kills}</div>
+            <div className="text-cyan-400 font-mono text-lg font-bold">长度: {stats.length}</div>
+            <div className="text-red-400 text-sm font-semibold">击杀: {stats.kills}</div>
           </div>
 
           {/* 排行榜 */}
@@ -325,7 +325,7 @@ export default function SnakeGamePage() {
           {/* 暂停按钮 */}
           <button
             onClick={togglePause}
-            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 text-white z-10 transition-opacity duration-200"
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-purple-400/30 shadow-lg shadow-purple-500/20 text-white z-10 transition-all duration-200 hover:bg-purple-500/20 hover:border-purple-400/50 active:scale-95"
             style={{ opacity: uiOpacity.pause }}
             aria-label="暂停"
           >

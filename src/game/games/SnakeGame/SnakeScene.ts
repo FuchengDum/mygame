@@ -435,9 +435,17 @@ export class SnakeScene extends Phaser.Scene {
       sprite.setAlpha(baseAlpha * invincibleAlpha)
 
       if (isHead) {
-        // 加速时发光
+        // 蛇头脉冲效果
+        const pulseScale = 1 + Math.sin(this.time.now / 200) * 0.1
+        sprite.setScale((radius / 12) * pulseScale)
+
+        // 加速时发光（更明显的黄色）
         if (state.isBoosting) {
           sprite.setTint(0xffff00)
+          sprite.setAlpha(1) // 加速时完全不透明
+        } else {
+          // 蛇头稍微亮一些
+          sprite.setAlpha(1)
         }
       }
     }
