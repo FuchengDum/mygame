@@ -125,6 +125,9 @@ export class GameWorld {
     // 更新空间哈希
     this.rebuildSpatialHash()
 
+    // 标记是否有磁铁效果修改了食物位置
+    let magnetEffectApplied = false
+
     // 更新所有蛇
     for (const snake of this.snakes) {
       if (!snake.state.alive) continue
@@ -139,6 +142,7 @@ export class GameWorld {
       // 磁铁效果：吸引附近食物
       if (snake.hasMagnet) {
         this.applyMagnetEffect(snake, deltaMs)
+        magnetEffectApplied = true
       }
 
       // 食物碰撞
@@ -147,6 +151,14 @@ export class GameWorld {
       // 蛇与蛇碰撞（头撞身体）
       if (!snake.isInvincible) {
         this.checkSnakeCollision(snake)
+      }
+    }
+
+    // 如果有磁铁效果，重建食物哈希以确保位置准确
+    if (magnetEffectApplied) {
+      this.foodHash.clear()
+      for (const food of this.foods) {
+        this.foodHash.insert(food)
       }
     }
 
@@ -246,14 +258,28 @@ export class GameWorld {
   private applyMagnetEffect(snake: SnakeEntity, deltaMs: number) {
     const head = snake.head
     const pullRadius = 260
-    const pullSpeed = 260 // px/s
-    const step = (pullSpeed * deltaMs) / 1000
+    const pullRadiusSq = pullRadius * pullRadius
+    const baseSpeed = 200 // 基础速度 px/s
+    const speedMultiplier = 2.5 // 距离越近速度越快的倍数
 
-    for (const food of this.foods) {
+    // 使用空间哈希只查询范围内的食物，避免遍历所有150个食物
+    const nearFoods = this.foodHash.queryNear(head.x, head.y, pullRadius)
+
+    for (const food of nearFoods) {
       const dx = head.x - food.x
       const dy = head.y - food.y
-      const dist = Math.hypot(dx, dy)
-      if (dist === 0 || dist > pullRadius) continue
+      const distSq = dx * dx + dy * dy
+
+      if (distSq === 0 || distSq > pullRadiusSq) continue
+
+      // 只在需要时计算平方根
+      const dist = Math.sqrt(distSq)
+
+      // 距离越近，速度越快（平滑加速）
+      const distanceRatio = 1 - (dist / pullRadius)
+      const currentSpeed = baseSpeed + (baseSpeed * speedMultiplier * distanceRatio)
+      const step = (currentSpeed * deltaMs) / 1000
+
       const s = Math.min(step, dist)
       food.x += (dx / dist) * s
       food.y += (dy / dist) * s

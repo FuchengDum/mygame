@@ -1,5 +1,6 @@
 // 实时排行榜组件
 
+import { memo } from 'react'
 import type { LeaderboardEntry } from '../../game/games/SnakeGame/core/types'
 
 interface Props {
@@ -8,9 +9,9 @@ interface Props {
   isLandscape?: boolean
 }
 
-export default function Leaderboard({ data, playerId, isLandscape = false }: Props) {
-  // 竖屏只显示前5，横屏显示前10
-  const displayCount = isLandscape ? 10 : 5
+export default memo(function Leaderboard({ data, playerId, isLandscape = false }: Props) {
+  // 竖屏只显示前3，横屏显示前5
+  const displayCount = isLandscape ? 5 : 3
   const displayData = data.slice(0, displayCount)
 
   // 找到玩家排名
@@ -51,9 +52,9 @@ export default function Leaderboard({ data, playerId, isLandscape = false }: Pro
       </div>
     </div>
   )
-}
+})
 
-function LeaderboardRow({
+const LeaderboardRow = memo(function LeaderboardRow({
   entry,
   isPlayer,
 }: {
@@ -81,4 +82,4 @@ function LeaderboardRow({
       <span className="w-8 text-right">{entry.length}</span>
     </div>
   )
-}
+})
