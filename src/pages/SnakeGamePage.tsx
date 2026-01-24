@@ -353,6 +353,7 @@ export default function SnakeGamePage() {
           onBoostEnd={handleBoostEnd}
           disabled={!stats.canBoost}
           isBoosting={isBoosting}
+          isLandscape={isLandscape}
         />
       )}
 

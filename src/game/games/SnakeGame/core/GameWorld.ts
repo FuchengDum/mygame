@@ -246,14 +246,28 @@ export class GameWorld {
   private applyMagnetEffect(snake: SnakeEntity, deltaMs: number) {
     const head = snake.head
     const pullRadius = 260
-    const pullSpeed = 260 // px/s
-    const step = (pullSpeed * deltaMs) / 1000
+    const pullRadiusSq = pullRadius * pullRadius
+    const baseSpeed = 200 // 基础速度 px/s
+    const speedMultiplier = 2.5 // 距离越近速度越快的倍数
 
-    for (const food of this.foods) {
+    // 使用空间哈希只查询范围内的食物，避免遍历所有150个食物
+    const nearFoods = this.foodHash.queryNear(head.x, head.y, pullRadius)
+
+    for (const food of nearFoods) {
       const dx = head.x - food.x
       const dy = head.y - food.y
-      const dist = Math.hypot(dx, dy)
-      if (dist === 0 || dist > pullRadius) continue
+      const distSq = dx * dx + dy * dy
+
+      if (distSq === 0 || distSq > pullRadiusSq) continue
+
+      // 只在需要时计算平方根
+      const dist = Math.sqrt(distSq)
+
+      // 距离越近，速度越快（平滑加速）
+      const distanceRatio = 1 - (dist / pullRadius)
+      const currentSpeed = baseSpeed + (baseSpeed * speedMultiplier * distanceRatio)
+      const step = (currentSpeed * deltaMs) / 1000
+
       const s = Math.min(step, dist)
       food.x += (dx / dist) * s
       food.y += (dy / dist) * s

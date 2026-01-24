@@ -82,6 +82,25 @@ export class SnakeScene extends Phaser.Scene {
     this.handleResize(this.scale.gameSize)
   }
 
+  // 计算小地图位置（根据屏幕方向动态调整）
+  private getMinimapPosition(viewportWidth: number, viewportHeight: number) {
+    const mapWidth = 120
+    const mapHeight = 90
+    const padding = 10
+    const bottomOffset = 80
+
+    // 横屏：放在左下角（避开右侧加速按钮）
+    // 竖屏：放在右下角（加速按钮在左侧）
+    const isLandscape = viewportWidth > viewportHeight
+
+    return {
+      x: isLandscape ? padding : viewportWidth - mapWidth - padding,
+      y: viewportHeight - mapHeight - padding - bottomOffset,
+      width: mapWidth,
+      height: mapHeight
+    }
+  }
+
   private handleResize(gameSize: Phaser.Structs.Size) {
     const width = gameSize.width
     const height = gameSize.height
@@ -91,15 +110,11 @@ export class SnakeScene extends Phaser.Scene {
     // 重新绘制小地图
     if (this.minimapBg) {
       this.minimapBg.clear()
-      const mapWidth = 120
-      const mapHeight = 90
-      const padding = 10
-      const viewportWidth = width
-      const viewportHeight = height
+      const pos = this.getMinimapPosition(width, height)
       this.minimapBg.fillStyle(0x000000, 0.6)
-      this.minimapBg.fillRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+      this.minimapBg.fillRect(pos.x, pos.y, pos.width, pos.height)
       this.minimapBg.lineStyle(1, 0x00f5ff, 0.5)
-      this.minimapBg.strokeRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+      this.minimapBg.strokeRect(pos.x, pos.y, pos.width, pos.height)
     }
 
     if (this.isPlaying) {
@@ -176,20 +191,18 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private createMinimap() {
-    const mapWidth = 120
-    const mapHeight = 90
-    const padding = 10
     const viewportWidth = this.cameras.main.width
     const viewportHeight = this.cameras.main.height
+    const pos = this.getMinimapPosition(viewportWidth, viewportHeight)
 
-    // 小地图移到右下角
+    // 小地图根据屏幕方向动态定位
     this.minimapBg = this.add.graphics()
     this.minimapBg.setScrollFactor(0)
     this.minimapBg.setDepth(100)
     this.minimapBg.fillStyle(0x000000, 0.6)
-    this.minimapBg.fillRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+    this.minimapBg.fillRect(pos.x, pos.y, pos.width, pos.height)
     this.minimapBg.lineStyle(1, 0x00f5ff, 0.5)
-    this.minimapBg.strokeRect(viewportWidth - mapWidth - padding, viewportHeight - mapHeight - padding - 80, mapWidth, mapHeight)
+    this.minimapBg.strokeRect(pos.x, pos.y, pos.width, pos.height)
 
     this.minimapOverlay = this.add.graphics()
     this.minimapOverlay.setScrollFactor(0)
@@ -312,12 +325,13 @@ export class SnakeScene extends Phaser.Scene {
 
   private updateCameraFollow(playerPos: { x: number; y: number }) {
     const viewport = { w: this.cameras.main.width, h: this.cameras.main.height }
+    const isLandscape = viewport.w > viewport.h
 
-    // UI安全边距
+    // UI安全边距（根据屏幕方向动态调整）
     const safeMargin = {
-      left: 150,   // 排行榜宽度
+      left: isLandscape ? 150 : 150,   // 横屏：小地图在左侧；竖屏：排行榜在左侧
       top: 80,     // 暂停按钮高度
-      right: 140,  // 小地图+加速按钮
+      right: isLandscape ? 80 : 140,   // 横屏：加速按钮在右侧；竖屏：小地图+加速按钮在右侧
       bottom: 200  // 摇杆区域
     }
 
@@ -342,29 +356,32 @@ export class SnakeScene extends Phaser.Scene {
     this.magnetGraphics.clear()
 
     const aliveSnakes = this.world.getAliveSnakes()
-    const foods = this.world.foods
     const PULL_RADIUS = 260
-    const PULL_RADIUS_SQ = PULL_RADIUS * PULL_RADIUS
 
     for (const snake of aliveSnakes) {
       if (!snake.hasMagnet) continue
 
       const head = snake.head
-      // 使用青色线条，透明度随距离变化
+
+      // 脉冲效果：基于时间的动态透明度和半径
+      const pulsePhase = (this.time.now / 800) % 1
+      const pulseAlpha = 0.15 + Math.sin(pulsePhase * Math.PI * 2) * 0.1
+
+      // 外圈光环（脉冲效果）
+      this.magnetGraphics.lineStyle(4, 0x00f5ff, pulseAlpha)
+      this.magnetGraphics.strokeCircle(head.x, head.y, PULL_RADIUS)
+
+      // 中圈光环
+      this.magnetGraphics.lineStyle(3, 0x00f5ff, 0.2)
+      this.magnetGraphics.strokeCircle(head.x, head.y, PULL_RADIUS * 0.7)
+
+      // 内圈光环（更明显）
       this.magnetGraphics.lineStyle(2, 0x00f5ff, 0.3)
+      this.magnetGraphics.strokeCircle(head.x, head.y, PULL_RADIUS * 0.4)
 
-      for (const food of foods) {
-        const dx = head.x - food.x
-        const dy = head.y - food.y
-        const distSq = dx * dx + dy * dy
-
-        if (distSq < PULL_RADIUS_SQ) {
-          // 距离越近，线条越明显
-          const alpha = 1 - (Math.sqrt(distSq) / PULL_RADIUS)
-          this.magnetGraphics.lineStyle(2, 0x00f5ff, alpha * 0.5)
-          this.magnetGraphics.lineBetween(food.x, food.y, head.x, head.y)
-        }
-      }
+      // 蛇头周围的光晕效果
+      this.magnetGraphics.fillStyle(0x00f5ff, 0.15)
+      this.magnetGraphics.fillCircle(head.x, head.y, 25)
     }
   }
 
@@ -546,13 +563,13 @@ export class SnakeScene extends Phaser.Scene {
   private updateMinimap() {
     if (!this.minimapOverlay || !this.minimapBg) return
 
-    const mapWidth = 120
-    const mapHeight = 90
-    const padding = 10
     const viewportWidth = this.cameras.main.width
     const viewportHeight = this.cameras.main.height
-    const mapX0 = viewportWidth - mapWidth - padding
-    const mapY0 = viewportHeight - mapHeight - padding - 80
+    const pos = this.getMinimapPosition(viewportWidth, viewportHeight)
+    const mapX0 = pos.x
+    const mapY0 = pos.y
+    const mapWidth = pos.width
+    const mapHeight = pos.height
     const now = this.time.now
 
     // 动态透明度：根据玩家位置调整
@@ -561,8 +578,11 @@ export class SnakeScene extends Phaser.Scene {
       const screenX = (playerPos.x - this.cameras.main.scrollX) * this.cameras.main.zoom
       const screenY = (playerPos.y - this.cameras.main.scrollY) * this.cameras.main.zoom
 
-      // 判断玩家是否接近小地图区域
-      const isNearMinimap = screenX > viewportWidth - 150 && screenY > viewportHeight - 200
+      // 判断玩家是否接近小地图区域（根据小地图位置动态判断）
+      const isLandscape = viewportWidth > viewportHeight
+      const isNearMinimap = isLandscape
+        ? screenX < 150 && screenY > viewportHeight - 200
+        : screenX > viewportWidth - 150 && screenY > viewportHeight - 200
       const targetAlpha = isNearMinimap ? 0.9 : 0.6
 
       this.minimapBg.setAlpha(targetAlpha)

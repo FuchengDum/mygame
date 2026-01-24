@@ -7,9 +7,10 @@ interface Props {
   onBoostEnd: () => void
   disabled?: boolean
   isBoosting?: boolean
+  isLandscape?: boolean
 }
 
-export default function BoostButton({ onBoostStart, onBoostEnd, disabled = false, isBoosting = false }: Props) {
+export default function BoostButton({ onBoostStart, onBoostEnd, disabled = false, isBoosting = false, isLandscape = false }: Props) {
   const isActiveRef = useRef(false)
 
   const handleStart = useCallback((e: React.PointerEvent | React.TouchEvent) => {
@@ -29,7 +30,8 @@ export default function BoostButton({ onBoostStart, onBoostEnd, disabled = false
   return (
     <button
       className={`
-        absolute bottom-20 right-8 z-50
+        absolute bottom-20 z-50
+        ${isLandscape ? 'right-8' : 'left-8'}
         w-16 h-16 rounded-full
         flex items-center justify-center
         select-none touch-none
