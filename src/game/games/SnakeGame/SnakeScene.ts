@@ -329,7 +329,7 @@ export class SnakeScene extends Phaser.Scene {
 
     // UI安全边距（根据屏幕方向动态调整）
     const safeMargin = {
-      left: isLandscape ? 150 : 150,   // 横屏：小地图在左侧；竖屏：排行榜在左侧
+      left: 150,   // 横屏：小地图在左侧；竖屏：排行榜在左侧
       top: 80,     // 暂停按钮高度
       right: isLandscape ? 80 : 140,   // 横屏：加速按钮在右侧；竖屏：小地图+加速按钮在右侧
       bottom: 200  // 摇杆区域

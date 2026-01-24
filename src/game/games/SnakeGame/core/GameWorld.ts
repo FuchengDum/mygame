@@ -125,6 +125,9 @@ export class GameWorld {
     // 更新空间哈希
     this.rebuildSpatialHash()
 
+    // 标记是否有磁铁效果修改了食物位置
+    let magnetEffectApplied = false
+
     // 更新所有蛇
     for (const snake of this.snakes) {
       if (!snake.state.alive) continue
@@ -139,6 +142,7 @@ export class GameWorld {
       // 磁铁效果：吸引附近食物
       if (snake.hasMagnet) {
         this.applyMagnetEffect(snake, deltaMs)
+        magnetEffectApplied = true
       }
 
       // 食物碰撞
@@ -147,6 +151,14 @@ export class GameWorld {
       // 蛇与蛇碰撞（头撞身体）
       if (!snake.isInvincible) {
         this.checkSnakeCollision(snake)
+      }
+    }
+
+    // 如果有磁铁效果，重建食物哈希以确保位置准确
+    if (magnetEffectApplied) {
+      this.foodHash.clear()
+      for (const food of this.foods) {
+        this.foodHash.insert(food)
       }
     }
 
