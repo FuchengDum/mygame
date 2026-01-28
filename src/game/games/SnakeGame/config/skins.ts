@@ -1,11 +1,20 @@
 // 皮肤配置
 
+export interface EvolutionVisualConfig {
+  stage: number
+  headTint?: number
+  bodyTints?: number[]
+  glowColor?: number
+  glowIntensity?: number
+}
+
 export interface SkinConfig {
   id: string
   name: string
   headColor: number
   bodyColors: number[]  // 渐变色
   strokeColor: number
+  evolutions?: EvolutionVisualConfig[]
 }
 
 export const SKINS: SkinConfig[] = [
