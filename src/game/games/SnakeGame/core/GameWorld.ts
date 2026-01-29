@@ -12,6 +12,8 @@ const FOOD_DEFINITIONS: Record<FoodType, { radius: number; value: number; growth
   slow: { radius: 9, value: 12, growth: 2, spawnWeight: 3 },
   double: { radius: 9, value: 0, growth: 0, spawnWeight: 2 },
   magnet: { radius: 9, value: 0, growth: 0, spawnWeight: 1 },
+  speedArrow: { radius: 9, value: 0, growth: 0, spawnWeight: 2 },
+  shield: { radius: 9, value: 0, growth: 0, spawnWeight: 1 },
   drop: { radius: 6, value: 8, growth: 1, spawnWeight: 0 } // 死亡掉落
 }
 
@@ -148,6 +150,12 @@ export class GameWorld {
       // 食物碰撞
       this.checkFoodCollision(snake)
 
+      // 检查进化
+      const evolved = snake.checkEvolution()
+      if (evolved) {
+        this.events.push({ type: 'evolve', data: { snakeId: snake.state.id, stage: evolved.stage } })
+      }
+
       // 蛇与蛇碰撞（头撞身体）
       if (!snake.isInvincible) {
         this.checkSnakeCollision(snake)
@@ -231,9 +239,12 @@ export class GameWorld {
 
         this.events.push({ type: 'eat', data: { snakeId: snake.state.id, foodId: food.id } })
 
-        // 移除食物
+        // 移除食物（同时从数组和哈希中移除，防止同帧重复拾取）
         const idx = this.foods.findIndex(f => f.id === food.id)
-        if (idx !== -1) this.foods.splice(idx, 1)
+        if (idx !== -1) {
+          this.foods.splice(idx, 1)
+          this.foodHash.remove(food)
+        }
       }
     }
   }
@@ -251,6 +262,13 @@ export class GameWorld {
         break
       case 'magnet':
         snake.applyBuff('magnet', 1, 8000)
+        break
+      case 'speedArrow':
+        snake.applyBuff('speed', 1.5, 2000)
+        break
+      case 'shield':
+        snake.state.shieldActive = true
+        snake.state.shieldUntil = Date.now() + 10000 // 10秒超时
         break
     }
   }
@@ -303,22 +321,33 @@ export class GameWorld {
           if (headDist < 15) {
             // 长度大者胜
             if (snake.state.length > victim.state.length) {
-              this.killSnake(victim, snake)
+              this.tryKillSnake(victim, snake)
             } else if (snake.state.length < victim.state.length) {
-              this.killSnake(snake, victim)
+              this.tryKillSnake(snake, victim)
             } else {
               // 长度相等，双死
-              this.killSnake(snake, victim)
-              this.killSnake(victim, snake)
+              this.tryKillSnake(snake, victim)
+              this.tryKillSnake(victim, snake)
             }
           } else {
             // 头撞身体，撞的人死
-            this.killSnake(snake, victim)
+            this.tryKillSnake(snake, victim)
           }
           return
         }
       }
     }
+  }
+
+  private tryKillSnake(snake: SnakeEntity, killer: SnakeEntity | null): boolean {
+    if (snake.state.shieldActive) {
+      snake.state.shieldActive = false
+      snake.state.shieldUntil = 0
+      this.events.push({ type: 'shieldBreak', data: { snakeId: snake.state.id } })
+      return false
+    }
+    this.killSnake(snake, killer)
+    return true
   }
 
   private killSnake(snake: SnakeEntity, killer: SnakeEntity | null) {

@@ -28,6 +28,17 @@ export class SpatialHash<T extends { x: number; y: number }> {
     this.cells.get(key)!.push(item)
   }
 
+  remove(item: T) {
+    const key = this.getKey(item.x, item.y)
+    const cell = this.cells.get(key)
+    if (cell) {
+      const idx = cell.indexOf(item)
+      if (idx !== -1) {
+        cell.splice(idx, 1)
+      }
+    }
+  }
+
   // 批量插入
   insertAll(items: T[]) {
     for (const item of items) {

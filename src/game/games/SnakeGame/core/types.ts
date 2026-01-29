@@ -4,6 +4,18 @@ export const WORLD_WIDTH = 4000 as const
 export const WORLD_HEIGHT = 3000
 export const GRID_SIZE = 20
 
+export interface PassiveBuffs {
+  turnSpeedMultiplier: number
+  boostEfficiency: number
+  baseSpeedMultiplier: number
+}
+
+export interface EvolutionStage {
+  stage: number
+  minLength: number
+  passiveBuffs: PassiveBuffs
+}
+
 // 蛇的状态
 export interface SnakeState {
   id: string
@@ -19,6 +31,9 @@ export interface SnakeState {
   alive: boolean
   invincibleUntil: number
   isBoosting: boolean
+  evolutionStage: number
+  shieldActive: boolean
+  shieldUntil: number
 }
 
 export interface Point {
@@ -27,7 +42,16 @@ export interface Point {
 }
 
 // 食物类型
-export type FoodType = 'pellet' | 'big' | 'speed' | 'slow' | 'double' | 'magnet' | 'drop'
+export type FoodType =
+  | 'pellet'
+  | 'big'
+  | 'speed'
+  | 'slow'
+  | 'double'
+  | 'magnet'
+  | 'drop'
+  | 'speedArrow'
+  | 'shield'
 
 export interface Food {
   id: string
@@ -40,7 +64,7 @@ export interface Food {
 }
 
 // 游戏事件
-export type GameEventType = 'kill' | 'death' | 'eat' | 'boost' | 'spawn'
+export type GameEventType = 'kill' | 'death' | 'eat' | 'boost' | 'spawn' | 'evolve' | 'shieldBreak'
 
 export interface GameEvent {
   type: GameEventType
@@ -50,6 +74,7 @@ export interface GameEvent {
     killerId?: string
     foodId?: string
     position?: Point
+    stage?: number
   }
 }
 

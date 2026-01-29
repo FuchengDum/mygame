@@ -12,6 +12,7 @@ interface SnakeGraphics {
   snakeId: string
   segments: Phaser.GameObjects.Sprite[]
   nameText?: Phaser.GameObjects.Text
+  shieldBubble?: Phaser.GameObjects.Arc
 }
 
 // 渲染用的食物
@@ -182,6 +183,31 @@ export class SnakeScene extends Phaser.Scene {
     magnetG.generateTexture('food_magnet', size, size)
     magnetG.destroy()
 
+    // speedArrow - 黄色箭头
+    const arrowG = this.make.graphics({ x: 0, y: 0 })
+    arrowG.fillStyle(0xffff00)
+    arrowG.fillCircle(r, r, 9)
+    arrowG.lineStyle(2, 0xffffff, 0.8)
+    arrowG.strokeCircle(r, r, 9)
+    arrowG.fillStyle(0xffffff)
+    arrowG.fillTriangle(r - 4, r + 3, r + 4, r + 3, r, r - 5)
+    arrowG.fillRect(r - 2, r, 4, 4)
+    arrowG.generateTexture('food_speedArrow', size, size)
+    arrowG.destroy()
+
+    // shield - 蓝色护盾
+    const shieldG = this.make.graphics({ x: 0, y: 0 })
+    shieldG.fillStyle(0x00ffff)
+    shieldG.fillCircle(r, r, 9)
+    shieldG.lineStyle(2, 0xffffff, 0.8)
+    shieldG.strokeCircle(r, r, 9)
+    shieldG.lineStyle(2, 0xffffff, 1)
+    shieldG.beginPath()
+    shieldG.arc(r, r, 5, Math.PI * 0.8, Math.PI * 2.2, false)
+    shieldG.strokePath()
+    shieldG.generateTexture('food_shield', size, size)
+    shieldG.destroy()
+
     // drop - 死亡掉落
     const dropG = this.make.graphics({ x: 0, y: 0 })
     dropG.fillStyle(0xffaa00)
@@ -280,6 +306,7 @@ export class SnakeScene extends Phaser.Scene {
     for (const sg of this.snakeGraphicsMap.values()) {
       sg.segments.forEach(s => s.destroy())
       sg.nameText?.destroy()
+      sg.shieldBubble?.destroy()
     }
     this.snakeGraphicsMap.clear()
 
@@ -312,6 +339,9 @@ export class SnakeScene extends Phaser.Scene {
 
     // 渲染磁铁特效
     this.renderMagnetEffects()
+
+    // 处理游戏事件
+    this.processGameEvents()
 
     // 更新相机跟随（智能偏移避免UI遮挡）
     const playerPos = this.world.getPlayerPosition()
@@ -349,6 +379,60 @@ export class SnakeScene extends Phaser.Scene {
     if (screenY > viewport.h - safeMargin.bottom) offsetY = -30
 
     this.cameras.main.centerOn(playerPos.x + offsetX, playerPos.y + offsetY)
+  }
+
+  private processGameEvents() {
+    for (const event of this.world.events) {
+      if (event.type === 'evolve' && event.data.snakeId && event.data.stage) {
+        const snake = this.world.snakes.find(s => s.state.id === event.data.snakeId)
+        if (snake) {
+          this.playEvolutionEffect(snake, event.data.stage)
+        }
+      } else if (event.type === 'shieldBreak' && event.data.snakeId) {
+        const snake = this.world.snakes.find(s => s.state.id === event.data.snakeId)
+        if (snake) {
+          this.playShieldBreakEffect(snake)
+        }
+      }
+    }
+  }
+
+  private playEvolutionEffect(snake: SnakeEntity, stage: number) {
+    const head = snake.head
+    const colors = [0x00f5ff, 0x00ff88, 0xffff00, 0xff8800, 0xff00ff]
+    const color = colors[Math.min(stage - 1, colors.length - 1)]
+
+    const particles = this.add.particles(head.x, head.y, 'snake_segment', {
+      speed: { min: 100, max: 200 },
+      scale: { start: 0.8, end: 0 },
+      lifespan: 600,
+      tint: color,
+      quantity: 20
+    })
+    this.time.delayedCall(600, () => particles.destroy())
+
+    // 使用与进化阶段匹配的颜色闪光，降低强度避免刺眼
+    const r = (color >> 16) & 0xff
+    const g = (color >> 8) & 0xff
+    const b = color & 0xff
+    // 闪光持续时间随阶段增加：150-300ms
+    const duration = 150 + stage * 30
+    this.cameras.main.flash(duration, r, g, b, false, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+      // 使用更柔和的淡出曲线
+      return progress < 0.3 ? 0.4 : 0.4 * (1 - (progress - 0.3) / 0.7)
+    })
+  }
+
+  private playShieldBreakEffect(snake: SnakeEntity) {
+    const head = snake.head
+    const particles = this.add.particles(head.x, head.y, 'snake_segment', {
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.6, end: 0 },
+      lifespan: 400,
+      tint: 0x00ffff,
+      quantity: 15
+    })
+    this.time.delayedCall(400, () => particles.destroy())
   }
 
   private renderMagnetEffects() {
@@ -397,6 +481,7 @@ export class SnakeScene extends Phaser.Scene {
           this.segmentPool.push(s)
         })
         sg.nameText?.destroy()
+        sg.shieldBubble?.destroy()
         this.snakeGraphicsMap.delete(id)
       }
     }
@@ -479,6 +564,44 @@ export class SnakeScene extends Phaser.Scene {
     const head = state.segments[0]
     sg.nameText.setPosition(head.x, head.y - 25)
     sg.nameText.setText(state.name)
+
+    // 渲染护盾效果
+    this.renderShieldEffect(snake, sg)
+
+    // 渲染进化外观
+    this.renderSnakeEvolution(snake, sg)
+  }
+
+  private renderShieldEffect(snake: SnakeEntity, sg: SnakeGraphics) {
+    if (snake.state.shieldActive) {
+      if (!sg.shieldBubble) {
+        sg.shieldBubble = this.add.circle(0, 0, 25, 0x00ffff, 0.2)
+        sg.shieldBubble.setStrokeStyle(2, 0x00ffff, 0.6)
+      }
+      sg.shieldBubble.setPosition(snake.head.x, snake.head.y)
+      sg.shieldBubble.setVisible(true)
+      const pulse = 1 + Math.sin(this.time.now / 300) * 0.1
+      sg.shieldBubble.setScale(pulse)
+    } else if (sg.shieldBubble) {
+      sg.shieldBubble.setVisible(false)
+    }
+  }
+
+  private renderSnakeEvolution(snake: SnakeEntity, sg: SnakeGraphics) {
+    const stage = snake.state.evolutionStage
+    if (stage <= 1) return
+
+    const glowColors = [0, 0x00f5ff, 0x00ff88, 0xffff00, 0xff00ff]
+    const glowColor = glowColors[Math.min(stage, glowColors.length - 1)]
+
+    if (sg.segments.length > 0) {
+      const headSprite = sg.segments[0]
+      const glowPulse = 0.8 + Math.sin(this.time.now / 400) * 0.2
+      headSprite.setAlpha(glowPulse)
+      if (stage >= 3) {
+        headSprite.setTint(glowColor)
+      }
+    }
   }
 
   private getSegmentColor(skin: SkinConfig, index: number): number {

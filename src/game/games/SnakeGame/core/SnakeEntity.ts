@@ -1,6 +1,6 @@
 // 蛇实体类 - 管理单条蛇的状态和行为
 
-import type { SnakeState, Point } from './types'
+import type { SnakeState, Point, EvolutionStage, PassiveBuffs } from './types'
 import { WORLD_WIDTH, WORLD_HEIGHT } from './types'
 
 const SEGMENT_SPACING = 12
@@ -9,6 +9,20 @@ const BOOST_SPEED_MULTIPLIER = 1.8
 const BOOST_CONSUME_RATE = 0.5 // 每秒消耗的节数
 const MIN_LENGTH_FOR_BOOST = 10
 const INVINCIBLE_DURATION = 3000 // 3秒无敌
+
+const DEFAULT_PASSIVE_BUFFS: PassiveBuffs = {
+  turnSpeedMultiplier: 1,
+  boostEfficiency: 1,
+  baseSpeedMultiplier: 1
+}
+
+const EVOLUTION_STAGES: EvolutionStage[] = [
+  { stage: 1, minLength: 0, passiveBuffs: { ...DEFAULT_PASSIVE_BUFFS } },
+  { stage: 2, minLength: 10, passiveBuffs: { ...DEFAULT_PASSIVE_BUFFS, turnSpeedMultiplier: 1.05 } },
+  { stage: 3, minLength: 25, passiveBuffs: { ...DEFAULT_PASSIVE_BUFFS, turnSpeedMultiplier: 1.05, boostEfficiency: 0.9 } },
+  { stage: 4, minLength: 50, passiveBuffs: { ...DEFAULT_PASSIVE_BUFFS, turnSpeedMultiplier: 1.05, boostEfficiency: 0.9 } },
+  { stage: 5, minLength: 100, passiveBuffs: { ...DEFAULT_PASSIVE_BUFFS, turnSpeedMultiplier: 1.05, boostEfficiency: 0.9, baseSpeedMultiplier: 1.05 } }
+]
 
 let entityIdCounter = 0
 
@@ -50,6 +64,7 @@ export class SnakeEntity {
     stallValue: 0,
     recentGrowth: 0
   }
+  private boostConsumeAccumulator: number = 0
 
   constructor(
     name: string,
@@ -79,7 +94,10 @@ export class SnakeEntity {
       skinId,
       alive: true,
       invincibleUntil: Date.now() + INVINCIBLE_DURATION,
-      isBoosting: false
+      isBoosting: false,
+      evolutionStage: 1,
+      shieldActive: false,
+      shieldUntil: 0
     }
   }
 
@@ -114,15 +132,23 @@ export class SnakeEntity {
     const dt = deltaMs / 1000
     const now = Date.now()
 
+    // 检查护盾超时
+    if (this.state.shieldActive && this.state.shieldUntil > 0 && now >= this.state.shieldUntil) {
+      this.state.shieldActive = false
+      this.state.shieldUntil = 0
+    }
+
     // 更新buff状态
     this.updateBuffs(now)
 
+    const passiveBuffs = this.getPassiveBuffs()
+
     // 计算速度（考虑buff）
-    let speedMult = this.buffs.speedMultiplier
+    let speedMult = this.buffs.speedMultiplier * passiveBuffs.baseSpeedMultiplier
     if (this.state.isBoosting && this.canBoost) {
       speedMult *= BOOST_SPEED_MULTIPLIER
       // 消耗长度
-      this.consumeLength(BOOST_CONSUME_RATE * dt)
+      this.consumeLength(BOOST_CONSUME_RATE * passiveBuffs.boostEfficiency * dt)
     }
 
     // 移动蛇头
@@ -133,7 +159,7 @@ export class SnakeEntity {
     this.updateStallDetection(now, moveDistance, safeDt)
 
     // 平滑转向 - 最小转弯半径约束防止原地转圈
-    const turnSpeed = 0.18
+    const turnSpeed = 0.18 * passiveBuffs.turnSpeedMultiplier
     // 根据拖延值动态调整最小转弯半径: 25 -> 50 (降低惩罚强度)
     const minTurnRadius = 25 + this.stallState.stallValue * 25
     const maxTurnPerSecond = Math.PI * 2.5 // 每秒最大转450度
@@ -172,6 +198,25 @@ export class SnakeEntity {
     return { newX, newY }
   }
 
+  checkEvolution(): EvolutionStage | null {
+    let nextStage: EvolutionStage | null = null
+    for (const stage of EVOLUTION_STAGES) {
+      if (stage.stage > this.state.evolutionStage && this.state.length >= stage.minLength) {
+        nextStage = stage
+      }
+    }
+    if (nextStage) {
+      this.state.evolutionStage = nextStage.stage
+      return nextStage
+    }
+    return null
+  }
+
+  getPassiveBuffs(): PassiveBuffs {
+    return EVOLUTION_STAGES.find(stage => stage.stage === this.state.evolutionStage)?.passiveBuffs
+      ?? DEFAULT_PASSIVE_BUFFS
+  }
+
   // 检查是否撞墙
   checkBoundary(): boolean {
     const head = this.head
@@ -192,11 +237,13 @@ export class SnakeEntity {
 
   // 消耗长度（加速时）
   private consumeLength(amount: number) {
-    const toRemove = Math.floor(amount)
+    this.boostConsumeAccumulator += amount
+    const toRemove = Math.floor(this.boostConsumeAccumulator)
     if (toRemove > 0 && this.state.segments.length > MIN_LENGTH_FOR_BOOST) {
       const removeCount = Math.min(toRemove, this.state.segments.length - MIN_LENGTH_FOR_BOOST)
       this.state.segments.splice(-removeCount, removeCount)
       this.state.length = this.state.segments.length
+      this.boostConsumeAccumulator -= removeCount // 只减去实际移除的数量，保留未消耗的债务
     }
 
     if (!this.canBoost) {
@@ -221,6 +268,10 @@ export class SnakeEntity {
     this.state.alive = true
     this.state.invincibleUntil = Date.now() + INVINCIBLE_DURATION
     this.state.isBoosting = false
+    this.state.evolutionStage = 1
+    this.state.shieldActive = false
+    this.state.shieldUntil = 0
+    this.boostConsumeAccumulator = 0
   }
 
   // 获取身体段（排除头部，用于碰撞检测）
