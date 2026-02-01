@@ -24,21 +24,30 @@ const STAGE_COLORS: Record<number, string> = {
 export default function EvolutionNotification({ stage, onDismiss }: Props) {
   const [isVisible, setIsVisible] = useState(true)
   const onDismissRef = useRef(onDismiss)
+  const fadeTimerRef = useRef<number | null>(null)
   onDismissRef.current = onDismiss
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false)
-      setTimeout(() => onDismissRef.current(), 300) // 等待淡出动画
+      fadeTimerRef.current = window.setTimeout(() => onDismissRef.current(), 300)
     }, 2500)
-    return () => clearTimeout(timer)
-  }, []) // 空依赖数组，只在挂载时执行一次
+    return () => {
+      clearTimeout(timer)
+      if (fadeTimerRef.current !== null) {
+        clearTimeout(fadeTimerRef.current)
+      }
+    }
+  }, [])
 
   const colorClass = STAGE_COLORS[stage] || 'from-purple-600 to-blue-500'
   const buffDesc = BUFF_DESCRIPTIONS[stage] || ''
 
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-label={`进化到阶段 ${stage}${buffDesc ? `，${buffDesc}` : ''}`}
       className={`
         fixed top-1/4 left-1/2 -translate-x-1/2 z-50
         transition-all duration-300 pointer-events-none

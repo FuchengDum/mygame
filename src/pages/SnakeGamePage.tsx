@@ -332,9 +332,9 @@ export default function SnakeGamePage() {
             style={{ opacity: uiOpacity.stats }}
           >
             <div className="text-cyan-400 font-mono text-lg font-bold">长度: {stats.length}</div>
-            <div className="text-red-400 text-sm font-semibold">击杀: {stats.kills}</div>
+            <div className="text-red-400 font-mono text-sm font-semibold">击杀: {stats.kills}</div>
             {stats.evolutionStage > 1 && (
-              <div className="text-purple-400 text-xs mt-1">Stage {stats.evolutionStage}</div>
+              <div className="text-purple-400 font-mono text-xs mt-1">Stage {stats.evolutionStage}</div>
             )}
           </div>
 

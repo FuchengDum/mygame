@@ -616,6 +616,12 @@ export class SnakeScene extends Phaser.Scene {
       for (let i = 0; i < effectLength; i++) {
         sg.segments[i].setTint(tint)
       }
+    } else if (sg.segments.length > 0) {
+      // 速度加成结束后清除 tint（恢复原色由 renderSnakeEvolution 处理）
+      const effectLength = Math.min(5, sg.segments.length)
+      for (let i = 0; i < effectLength; i++) {
+        sg.segments[i].clearTint()
+      }
     }
   }
 
