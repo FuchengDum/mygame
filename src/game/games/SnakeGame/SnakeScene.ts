@@ -48,6 +48,7 @@ export class SnakeScene extends Phaser.Scene {
   private minimapOverlay?: Phaser.GameObjects.Graphics
   private minimapDots: Map<string, Phaser.GameObjects.Arc> = new Map()
   private minimapLastDrawAtMs: number = 0
+  private magnetRadiusPx: number = 180
 
   private isPlaying: boolean = false
   private config: GameConfig | null = null
@@ -80,6 +81,7 @@ export class SnakeScene extends Phaser.Scene {
 
     // 监听 resize 事件
     this.scale.on('resize', this.handleResize, this)
+    this.updateViewportDerivedValues()
     this.handleResize(this.scale.gameSize)
   }
 
@@ -102,11 +104,18 @@ export class SnakeScene extends Phaser.Scene {
     }
   }
 
+  private updateViewportDerivedValues() {
+    const vw = this.cameras.main.displayWidth || this.scale.gameSize.width
+    const vh = this.cameras.main.displayHeight || this.scale.gameSize.height
+    this.magnetRadiusPx = Phaser.Math.Clamp(Math.min(vw, vh) * 0.4, 120, 260)
+  }
+
   private handleResize(gameSize: Phaser.Structs.Size) {
     const width = gameSize.width
     const height = gameSize.height
 
     this.cameras.resize(width, height)
+    this.updateViewportDerivedValues()
 
     // 重新绘制小地图
     if (this.minimapBg) {
@@ -411,15 +420,16 @@ export class SnakeScene extends Phaser.Scene {
     })
     this.time.delayedCall(600, () => particles.destroy())
 
-    // 使用与进化阶段匹配的颜色闪光，降低强度避免刺眼
-    const r = (color >> 16) & 0xff
-    const g = (color >> 8) & 0xff
-    const b = color & 0xff
-    // 闪光持续时间随阶段增加：150-300ms
-    const duration = 150 + stage * 30
-    this.cameras.main.flash(duration, r, g, b, false, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
-      // 使用更柔和的淡出曲线
-      return progress < 0.3 ? 0.4 : 0.4 * (1 - (progress - 0.3) / 0.7)
+    // 局部扩散光圈效果（替代全屏闪光）
+    const glow = this.add.circle(head.x, head.y, 20, color, 0.5)
+    glow.setBlendMode(Phaser.BlendModes.ADD)
+    this.tweens.add({
+      targets: glow,
+      scale: 2.2,
+      alpha: 0,
+      duration: 160 + stage * 30,
+      ease: 'Sine.easeOut',
+      onComplete: () => glow.destroy()
     })
   }
 
@@ -440,7 +450,7 @@ export class SnakeScene extends Phaser.Scene {
     this.magnetGraphics.clear()
 
     const aliveSnakes = this.world.getAliveSnakes()
-    const PULL_RADIUS = 260
+    const PULL_RADIUS = this.magnetRadiusPx
 
     for (const snake of aliveSnakes) {
       if (!snake.hasMagnet) continue
