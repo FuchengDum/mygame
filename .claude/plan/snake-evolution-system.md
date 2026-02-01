@@ -1,9 +1,31 @@
-# 📋 实施计划：贪吃蛇无限进化机制
+# 📋 实施计划：贪吃蛇无限进化机制（修订版）
 
 ## 任务类型
 - [x] 前端 (→ Gemini)
 - [x] 后端 (→ Codex)
 - [x] 全栈 (→ 并行)
+
+---
+
+## 🎯 设计原则（基于提案文档）
+
+> **核心约束**：以下原则不可违背
+
+1. **保持核心规则不可破坏**："头撞身体即死"是游戏的灵魂
+2. **UI 极简**：维持单一加速按钮，能力以道具形式呈现，避免多按钮
+3. **公平竞技**：AI 与玩家采用同一规则，无"AI 作弊感"
+4. **渐进式引入**：先验证简单机制，再考虑复杂系统
+5. **长度 = 实力**：被动增益控制在 5-10% 以内，保持直觉规则
+
+---
+
+## 📊 分阶段实施路径
+
+| 阶段 | 内容 | 风险等级 | 优先级 | 状态 |
+|------|------|----------|--------|------|
+| **Phase A** | 外观进化 + 被动增益 | 低 | P0 | 本次实施 |
+| **Phase B** | 场地道具系统（拾取即生效） | 中 | P1 | 本次实施 |
+| **Phase C** | 主动能力系统（需验证 A/B 后决定） | 高 | P2 | 延迟实施 |
 
 ---
 
@@ -61,111 +83,97 @@ respawn(x: number, y: number) {
 
 ---
 
-## 技术方案
+## Phase A：外观进化 + 被动增益（P0）
 
-综合 Codex（后端架构）+ Gemini（UI/UX设计）分析的最优方案：
+### 进化阶段配置（仅基于长度）
 
-### 核心设计决策
-
-1. **架构选择**：Option B 轻量版 - 在 `core/` 下新增能力/进化配置模块，执行逻辑挂在 `SnakeEntity`/`GameWorld`
-2. **进化触发**：以 `length` 为主，`score` 为辅（score = 食物value + kills）
-3. **穿墙实现**：仅免疫蛇体碰撞，不穿越地图边界（避免离场问题）
-4. **UI方案**：固定能力栏（AbilityBar）+ 非阻塞式进化特效
-5. **长度消耗**：所有消耗长度的操作（加速、能力）统一使用累积器机制，避免精度丢失
-
-### 进化阶段配置
-
-| 阶段 | 最小长度 | 最小分数 | 解锁能力 |
+| 阶段 | 最小长度 | 外观变化 | 被动增益 |
 |------|----------|----------|----------|
-| 1 | 5 | 0 | - |
-| 2 | 12 | 30 | 瞬间加速 (Instant Boost) |
-| 3 | 20 | 60 | 穿墙/无敌 (Phase-through) |
-| 4 | 35 | 120 | 分身攻击 (Clone Attack) |
-| 5 | 50 | 200 | 能力强化版 (Boost+, Phase+) |
+| 1 | 0 | 基础外观 | - |
+| 2 | 10 | 蛇头发光 + 身体色调变化 | 转向速度 +5% |
+| 3 | 25 | 蛇身渐变 + 粒子拖尾 | 加速效率 +10%（消耗更少长度） |
+| 4 | 50 | 蛇头皇冠/角 + 发光光环 | 视野范围 +10% |
+| 5 | 100 | 全身特效 + 独特纹理 | 基础速度 +5% |
 
-### 能力参数设计
-
-| 能力 | 持续时间 | 冷却时间 | 长度消耗 | 效果 |
-|------|----------|----------|----------|------|
-| Instant Boost | 1.5s | 8s | 2节 | 速度×2.5 |
-| Phase-through | 2s | 15s | 3节 | 免疫蛇体碰撞 |
-| Clone Attack | 3s | 20s | 5节 | 生成幻影/发射能量球 |
-
----
-
-## 实施步骤
-
-### Phase 0: Bug 修复 - 加速长度消耗 (SnakeEntity.ts) ⚠️ 优先
-
-**文件**: `src/game/games/SnakeGame/core/SnakeEntity.ts`
-
-**修改内容**:
-1. 添加私有属性 `boostConsumeAccumulator: number = 0`
-2. 修改 `consumeLength` 方法，使用累积器机制
-3. 在 `respawn` 方法中重置累积器
+### 被动增益参数（严格限制 5-10%）
 
 ```typescript
-// 新增属性
-private boostConsumeAccumulator: number = 0
-
-// 修改方法
-private consumeLength(amount: number) {
-  this.boostConsumeAccumulator += amount
-  const toRemove = Math.floor(this.boostConsumeAccumulator)
-  if (toRemove > 0 && this.state.segments.length > MIN_LENGTH_FOR_BOOST) {
-    const removeCount = Math.min(toRemove, this.state.segments.length - MIN_LENGTH_FOR_BOOST)
-    this.state.segments.splice(-removeCount, removeCount)
-    this.state.length = this.state.segments.length
-    this.boostConsumeAccumulator -= toRemove  // 保留小数部分继续累积
-  }
-  if (!this.canBoost) {
-    this.state.isBoosting = false
-  }
-}
-
-// respawn 中添加
-respawn(x: number, y: number) {
-  // ... 现有逻辑
-  this.boostConsumeAccumulator = 0
+const EVOLUTION_PASSIVE_BUFFS = {
+  stage2: { turnSpeedMultiplier: 1.05 },      // 转向速度 +5%
+  stage3: { boostEfficiency: 0.9 },           // 加速消耗 -10%（即效率 +10%）
+  stage4: { viewRangeMultiplier: 1.10 },      // 视野范围 +10%
+  stage5: { baseSpeedMultiplier: 1.05 }       // 基础速度 +5%
 }
 ```
 
-**预期产物**: 加速时正确消耗蛇身长度（每2秒消耗1节）
-
----
-
-### Phase 1: 类型定义与配置 (types.ts + skins.ts)
+### 技术方案
 
 **文件**: `src/game/games/SnakeGame/core/types.ts`
 
 ```typescript
 // 新增类型定义
-export type AbilityType = 'instantBoost' | 'phaseThrough' | 'cloneAttack'
-
 export interface EvolutionStage {
   stage: number
   minLength: number
-  minScore: number
-  unlocks: AbilityType[]
+  passiveBuffs: Partial<PassiveBuffs>
 }
 
-export interface AbilityState {
-  type: AbilityType
-  activeUntil: number      // 激活结束时间戳
-  cooldownUntil: number    // 冷却结束时间戳
-  duration: number         // 持续时间(ms)
-  cooldown: number         // 冷却时间(ms)
-  lengthCost: number       // 长度消耗
+export interface PassiveBuffs {
+  turnSpeedMultiplier: number
+  boostEfficiency: number      // 加速消耗倍率（<1 表示更高效）
+  viewRangeMultiplier: number
+  baseSpeedMultiplier: number
 }
 
 // 扩展 SnakeState
 export interface SnakeState {
   // ... 现有字段
-  score: number                           // 新增：得分
-  evolutionStage: number                  // 新增：进化阶段
-  unlockedAbilities: AbilityType[]        // 新增：已解锁能力
-  abilityCooldowns: Record<AbilityType, number>  // 新增：能力冷却
-  activeAbilities: Record<AbilityType, number>   // 新增：激活中能力
+  evolutionStage: number       // 新增：进化阶段 (1-5)
+}
+```
+
+**文件**: `src/game/games/SnakeGame/core/SnakeEntity.ts`
+
+```typescript
+// 进化阶段配置
+const EVOLUTION_STAGES: EvolutionStage[] = [
+  { stage: 1, minLength: 0, passiveBuffs: {} },
+  { stage: 2, minLength: 10, passiveBuffs: { turnSpeedMultiplier: 1.05 } },
+  { stage: 3, minLength: 25, passiveBuffs: { boostEfficiency: 0.9 } },
+  { stage: 4, minLength: 50, passiveBuffs: { viewRangeMultiplier: 1.10 } },
+  { stage: 5, minLength: 100, passiveBuffs: { baseSpeedMultiplier: 1.05 } }
+]
+
+class SnakeEntity {
+  // 检查并更新进化状态
+  checkEvolution(): EvolutionStage | null {
+    const currentStage = this.state.evolutionStage || 1
+    for (const stage of EVOLUTION_STAGES) {
+      if (stage.stage > currentStage && this.state.length >= stage.minLength) {
+        this.state.evolutionStage = stage.stage
+        return stage
+      }
+    }
+    return null
+  }
+
+  // 获取当前被动增益
+  getPassiveBuffs(): PassiveBuffs {
+    const defaults: PassiveBuffs = {
+      turnSpeedMultiplier: 1,
+      boostEfficiency: 1,
+      viewRangeMultiplier: 1,
+      baseSpeedMultiplier: 1
+    }
+    const stage = this.state.evolutionStage || 1
+    // 累积所有已解锁阶段的增益
+    for (const s of EVOLUTION_STAGES) {
+      if (s.stage <= stage) {
+        Object.assign(defaults, s.passiveBuffs)
+      }
+    }
+    return defaults
+  }
 }
 ```
 
@@ -178,500 +186,401 @@ export interface EvolutionVisualConfig {
   headTint?: number           // 蛇头色调变化
   bodyTints?: number[]        // 蛇身渐变色
   glowColor?: number          // 发光颜色
+  glowIntensity?: number      // 发光强度
   particleColor?: number      // 粒子颜色
+  crownVisible?: boolean      // 是否显示皇冠
 }
 
 export interface SkinConfig {
   // ... 现有字段
-  evolutions: EvolutionVisualConfig[]  // 新增：进化阶段视觉
+  evolutions?: EvolutionVisualConfig[]  // 新增：进化阶段视觉
 }
 ```
 
-**预期产物**: 完整的类型定义，支持进化系统和能力系统
-
----
-
-### Phase 2: 蛇实体能力系统 (SnakeEntity.ts)
-
-**文件**: `src/game/games/SnakeGame/core/SnakeEntity.ts`
-
-```typescript
-// 新增常量
-const EVOLUTION_STAGES: EvolutionStage[] = [
-  { stage: 1, minLength: 5, minScore: 0, unlocks: [] },
-  { stage: 2, minLength: 12, minScore: 30, unlocks: ['instantBoost'] },
-  { stage: 3, minLength: 20, minScore: 60, unlocks: ['phaseThrough'] },
-  { stage: 4, minLength: 35, minScore: 120, unlocks: ['cloneAttack'] },
-  { stage: 5, minLength: 50, minScore: 200, unlocks: [] }  // 能力强化
-]
-
-const ABILITY_CONFIG: Record<AbilityType, Omit<AbilityState, 'type' | 'activeUntil' | 'cooldownUntil'>> = {
-  instantBoost: { duration: 1500, cooldown: 8000, lengthCost: 2 },
-  phaseThrough: { duration: 2000, cooldown: 15000, lengthCost: 3 },
-  cloneAttack: { duration: 3000, cooldown: 20000, lengthCost: 5 }
-}
-
-// 新增方法
-class SnakeEntity {
-  // 检查并更新进化状态
-  checkEvolution(): EvolutionStage | null {
-    const currentStage = this.state.evolutionStage
-    for (const stage of EVOLUTION_STAGES) {
-      if (stage.stage > currentStage &&
-          this.state.length >= stage.minLength &&
-          this.state.score >= stage.minScore) {
-        this.applyEvolution(stage)
-        return stage
-      }
-    }
-    return null
-  }
-
-  // 应用进化
-  applyEvolution(stage: EvolutionStage) {
-    this.state.evolutionStage = stage.stage
-    this.state.unlockedAbilities.push(...stage.unlocks)
-  }
-
-  // 检查能力是否可用
-  canUseAbility(type: AbilityType): boolean {
-    const now = Date.now()
-    return this.state.alive &&
-           this.state.unlockedAbilities.includes(type) &&
-           now >= (this.state.abilityCooldowns[type] || 0) &&
-           this.state.length >= ABILITY_CONFIG[type].lengthCost
-  }
-
-  // 激活能力
-  activateAbility(type: AbilityType): boolean {
-    if (!this.canUseAbility(type)) return false
-    const now = Date.now()
-    const config = ABILITY_CONFIG[type]
-    this.state.activeAbilities[type] = now + config.duration
-    this.state.abilityCooldowns[type] = now + config.cooldown
-    this.consumeLength(config.lengthCost)
-    return true
-  }
-
-  // 检查能力是否激活中
-  isAbilityActive(type: AbilityType): boolean {
-    return Date.now() < (this.state.activeAbilities[type] || 0)
-  }
-
-  // Getter: 是否处于穿墙状态
-  get isPhasing(): boolean {
-    return this.isAbilityActive('phaseThrough')
-  }
-
-  // Getter: 是否处于瞬间加速状态
-  get isInstantBoosting(): boolean {
-    return this.isAbilityActive('instantBoost')
-  }
-}
-```
-
-**预期产物**: 完整的进化检测、能力激活、状态管理逻辑
-
----
-
-### Phase 3: 游戏世界碰撞与能力实体 (GameWorld.ts)
-
-**文件**: `src/game/games/SnakeGame/core/GameWorld.ts`
-
-```typescript
-// 新增类型
-interface CloneEntity {
-  id: string
-  ownerId: string
-  segments: Point[]
-  createdAt: number
-  ttl: number  // 存活时间
-}
-
-interface Projectile {
-  id: string
-  ownerId: string
-  x: number
-  y: number
-  direction: number
-  speed: number
-  createdAt: number
-  ttl: number
-}
-
-class GameWorld {
-  private clones: CloneEntity[] = []
-  private projectiles: Projectile[] = []
-
-  update(deltaMs: number) {
-    // ... 现有逻辑
-
-    // 更新克隆体和投射物
-    this.updateClones(deltaMs)
-    this.updateProjectiles(deltaMs)
-
-    for (const snake of this.snakes) {
-      if (!snake.state.alive) continue
-      snake.update(deltaMs)
-
-      // 检查进化
-      const evolved = snake.checkEvolution()
-      if (evolved) {
-        this.events.push({ type: 'evolve', data: { snakeId: snake.state.id, stage: evolved.stage } })
-      }
-
-      // 边界检测 - 穿墙状态不免疫边界
-      if (snake.checkBoundary()) {
-        this.killSnake(snake, null)
-        continue
-      }
-
-      // 蛇与蛇碰撞 - 穿墙状态免疫
-      if (!snake.isInvincible && !snake.isPhasing) {
-        this.checkSnakeCollision(snake)
-      }
-    }
-
-    // 检查克隆体/投射物碰撞
-    this.checkCloneCollision()
-    this.checkProjectileCollision()
-  }
-
-  // 创建克隆体
-  createClone(snake: SnakeEntity) {
-    const clone: CloneEntity = {
-      id: `clone_${Date.now()}`,
-      ownerId: snake.state.id,
-      segments: snake.state.segments.slice(-5).map(s => ({ ...s })),
-      createdAt: Date.now(),
-      ttl: 3000
-    }
-    this.clones.push(clone)
-  }
-
-  // 发射能量球
-  fireProjectile(snake: SnakeEntity) {
-    const projectile: Projectile = {
-      id: `proj_${Date.now()}`,
-      ownerId: snake.state.id,
-      x: snake.head.x,
-      y: snake.head.y,
-      direction: snake.state.direction,
-      speed: 400,
-      createdAt: Date.now(),
-      ttl: 2000
-    }
-    this.projectiles.push(projectile)
-  }
-
-  // 克隆体碰撞检测 - 触发减速
-  private checkCloneCollision() {
-    for (const clone of this.clones) {
-      for (const snake of this.snakes) {
-        if (snake.state.id === clone.ownerId || !snake.state.alive) continue
-        // 检测碰撞并应用减速
-        for (const seg of clone.segments) {
-          if (distance(snake.head, seg) < 15) {
-            snake.applyBuff('speed', 0.5, 1500)  // 减速50%持续1.5秒
-            break
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-**预期产物**: 进化事件触发、穿墙碰撞豁免、克隆体/投射物系统
-
----
-
-### Phase 4: AI策略升级 (AIController.ts)
-
-**文件**: `src/game/games/SnakeGame/ai/AIController.ts`
-
-```typescript
-class AIController {
-  private updateAI(snake: SnakeEntity) {
-    // ... 现有逻辑
-
-    // 能力决策
-    this.decideAbilityUsage(snake)
-
-    // 围剿策略
-    if (this.shouldAttemptSurround(snake)) {
-      this.executeSurroundStrategy(snake)
-    }
-
-    // 以小搏大策略
-    if (this.isBeingChased(snake)) {
-      this.executeEscapeStrategy(snake)
-    }
-  }
-
-  // 能力使用决策
-  private decideAbilityUsage(snake: SnakeEntity) {
-    const dangerLevel = this.calculateDangerLevel(snake)
-    const nearestTarget = this.findNearestSnake(snake)
-
-    // 高危时使用穿墙
-    if (dangerLevel > 0.7 && snake.canUseAbility('phaseThrough')) {
-      this.world.activateAbility(snake, 'phaseThrough')
-      return
-    }
-
-    // 追击时使用瞬间加速
-    if (nearestTarget &&
-        snake.state.length > nearestTarget.state.length &&
-        snake.canUseAbility('instantBoost')) {
-      const dist = distance(snake.head, nearestTarget.head)
-      if (dist < 150 && dist > 50) {
-        this.world.activateAbility(snake, 'instantBoost')
-        return
-      }
-    }
-
-    // 被追击时使用分身
-    if (this.isBeingChased(snake) && snake.canUseAbility('cloneAttack')) {
-      this.world.activateAbility(snake, 'cloneAttack')
-    }
-  }
-
-  // 围剿策略 - 大蛇包围小蛇
-  private executeSurroundStrategy(snake: SnakeEntity) {
-    const target = this.findSmallerTarget(snake)
-    if (!target) return
-
-    // 计算切断路线角度
-    const predictedPos = this.predictPosition(target, 500)
-    const cutoffAngle = Math.atan2(predictedPos.y - snake.head.y, predictedPos.x - snake.head.x)
-    snake.setTargetDirection(cutoffAngle)
-  }
-
-  // 以小搏大策略 - 诱导对手撞墙/撞体
-  private executeEscapeStrategy(snake: SnakeEntity) {
-    const chaser = this.findChaser(snake)
-    if (!chaser) return
-
-    // 优先逃向边界附近（诱导撞墙）
-    const escapeAngle = this.calculateEscapeAngle(snake, chaser)
-    snake.setTargetDirection(escapeAngle)
-
-    // 短暂加速诱导
-    if (snake.canBoost && Math.random() < 0.3) {
-      snake.setBoost(true)
-    }
-  }
-}
-```
-
-**预期产物**: AI能力决策、围剿策略、以小搏大策略
-
----
-
-### Phase 5: 渲染层与UI (SnakeScene.ts + React组件)
+### 进化视觉反馈
 
 **文件**: `src/game/games/SnakeGame/SnakeScene.ts`
 
 ```typescript
-class SnakeScene {
-  // 渲染蛇 - 根据进化阶段和能力状态
-  private renderSnake(snake: SnakeEntity, graphics: SnakeGraphics) {
-    const skin = getSkinById(snake.state.skinId)
-    const evolutionVisual = skin.evolutions?.[snake.state.evolutionStage - 1]
+// 进化特效（非阻塞式）
+private playEvolutionEffect(snake: SnakeEntity, stage: number) {
+  // 1. 粒子爆发效果
+  const particles = this.add.particles(snake.head.x, snake.head.y, 'particle', {
+    speed: { min: 100, max: 200 },
+    scale: { start: 1.5, end: 0 },
+    lifespan: 600,
+    tint: this.getEvolutionColor(stage),
+    quantity: 20
+  })
+  this.time.delayedCall(600, () => particles.destroy())
 
-    for (let i = 0; i < snake.state.segments.length; i++) {
-      const sprite = graphics.segments[i]
+  // 2. 闪光效果
+  this.cameras.main.flash(200, 255, 255, 255, false, (_, progress) => {
+    if (progress === 1) {
+      // 闪光结束
+    }
+  })
 
-      // 穿墙状态 - 半透明
-      if (snake.isPhasing) {
-        sprite.setAlpha(0.4)
-        sprite.setTint(0x00ffff)
-      }
+  // 3. 音效
+  this.sound.play('evolve', { volume: 0.5 })
+}
 
-      // 瞬间加速 - 拖尾特效
-      if (snake.isInstantBoosting) {
-        this.addBoostTrail(snake)
-      }
+// 根据进化阶段渲染蛇
+private renderSnakeEvolution(snake: SnakeEntity, graphics: SnakeGraphics) {
+  const skin = getSkinById(snake.state.skinId)
+  const stage = snake.state.evolutionStage || 1
+  const evolutionVisual = skin.evolutions?.[stage - 1]
 
-      // 进化外观
-      if (evolutionVisual?.bodyTints) {
-        const colorIndex = i % evolutionVisual.bodyTints.length
-        sprite.setTint(evolutionVisual.bodyTints[colorIndex])
-      }
+  if (!evolutionVisual) return
+
+  // 应用蛇头色调
+  if (evolutionVisual.headTint) {
+    graphics.head.setTint(evolutionVisual.headTint)
+  }
+
+  // 应用蛇身渐变
+  if (evolutionVisual.bodyTints) {
+    for (let i = 0; i < graphics.segments.length; i++) {
+      const colorIndex = i % evolutionVisual.bodyTints.length
+      graphics.segments[i].setTint(evolutionVisual.bodyTints[colorIndex])
     }
   }
 
-  // 进化特效
-  private playEvolutionEffect(snake: SnakeEntity) {
-    const particles = this.add.particles(snake.head.x, snake.head.y, 'particle', {
-      speed: { min: 100, max: 200 },
-      scale: { start: 1, end: 0 },
-      lifespan: 500,
-      tint: 0x00ffff
-    })
-    this.time.delayedCall(500, () => particles.destroy())
+  // 发光效果
+  if (evolutionVisual.glowColor && evolutionVisual.glowIntensity) {
+    // 使用 Phaser 的 postFX 或自定义 shader
+    graphics.head.setPostPipeline('GlowPostFX')
   }
 }
 ```
 
-**React UI组件** (新建 `src/components/snake/AbilityBar.tsx`)
+### 新手引导（首次进化）
+
+**文件**: `src/components/snake/EvolutionNotification.tsx`
 
 ```typescript
-interface AbilityButtonProps {
-  type: AbilityType
-  status: 'ready' | 'cooldown' | 'locked'
-  cooldownPercent?: number
-  onClick: () => void
-  hotkey: string
+interface EvolutionNotificationProps {
+  stage: number
+  buffDescription: string
+  onDismiss: () => void
 }
 
-const AbilityButton: React.FC<AbilityButtonProps> = ({ type, status, cooldownPercent, onClick, hotkey }) => {
-  const icons = {
-    instantBoost: '⚡',
-    phaseThrough: '👻',
-    cloneAttack: '🔮'
-  }
+const EvolutionNotification: React.FC<EvolutionNotificationProps> = ({
+  stage,
+  buffDescription,
+  onDismiss
+}) => {
+  // 3秒后自动消失
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 3000)
+    return () => clearTimeout(timer)
+  }, [onDismiss])
 
   return (
-    <button
-      onClick={onClick}
-      disabled={status !== 'ready'}
-      className={cn(
-        'w-12 h-12 rounded-lg border-2 relative',
-        status === 'ready' && 'border-neon-blue shadow-neon-blue bg-dark-card',
-        status === 'cooldown' && 'border-gray-600 bg-dark-card opacity-50',
-        status === 'locked' && 'border-gray-800 bg-gray-900 opacity-30'
-      )}
-    >
-      <span className="text-2xl">{icons[type]}</span>
-      {status === 'cooldown' && (
-        <div
-          className="absolute inset-0 bg-gray-800 rounded-lg"
-          style={{ height: `${cooldownPercent}%`, bottom: 0 }}
-        />
-      )}
-      <span className="absolute bottom-0 right-1 text-xs text-gray-400">{hotkey}</span>
-    </button>
+    <div className="fixed top-1/4 left-1/2 -translate-x-1/2 z-50 animate-bounce-in">
+      <div className="bg-gradient-to-r from-purple-600 to-blue-500 rounded-lg p-4 shadow-lg">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-white mb-2">
+            进化！阶段 {stage}
+          </div>
+          <div className="text-sm text-white/80">
+            {buffDescription}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
-const AbilityBar: React.FC<{ abilities: AbilityState[] }> = ({ abilities }) => {
+// 增益描述映射
+const BUFF_DESCRIPTIONS: Record<number, string> = {
+  2: '转向速度 +5%',
+  3: '加速效率 +10%',
+  4: '视野范围 +10%',
+  5: '基础速度 +5%'
+}
+```
+
+---
+
+## Phase B：场地道具系统（P1）
+
+### 道具类型设计
+
+| 道具 | 效果 | 持续时间 | 视觉 | 复用现有系统 |
+|------|------|----------|------|--------------|
+| 速度箭头 | 加速 ×1.5，不消耗长度 | 2s | 黄色箭头图标 | 扩展 `FoodType` |
+| 磁铁 | 自动吸引附近食物 | 5s | 红色 U 形磁铁 | 已实现 `magnet` |
+| 护盾 | 免疫一次碰撞 | 单次触发 | 蓝色气泡 | 新增 `shield` |
+
+### 技术方案
+
+**文件**: `src/game/games/SnakeGame/core/types.ts`
+
+```typescript
+// 扩展 FoodType
+export type FoodType = 'pellet' | 'big' | 'speed' | 'slow' | 'double' | 'magnet' | 'drop'
+  | 'speedArrow'  // 新增：速度箭头
+  | 'shield'      // 新增：护盾
+
+// 新增护盾状态
+export interface SnakeState {
+  // ... 现有字段
+  shieldActive: boolean        // 新增：护盾是否激活
+}
+```
+
+**文件**: `src/game/games/SnakeGame/core/GameWorld.ts`
+
+```typescript
+// 扩展食物效果处理
+private applyFoodEffect(snake: SnakeEntity, food: Food) {
+  switch (food.type) {
+    // ... 现有 case
+
+    case 'speedArrow':
+      // 2秒加速，不消耗长度
+      snake.applyBuff('speedBoost', 1.5, 2000)
+      this.events.push({ type: 'eat', data: { snakeId: snake.state.id, foodId: food.id } })
+      break
+
+    case 'shield':
+      // 激活护盾（单次免疫）
+      snake.state.shieldActive = true
+      this.events.push({ type: 'eat', data: { snakeId: snake.state.id, foodId: food.id } })
+      break
+  }
+}
+
+// 修改碰撞检测，支持护盾
+private checkSnakeCollision(snake: SnakeEntity) {
+  // ... 现有碰撞检测逻辑
+
+  if (collision) {
+    if (snake.state.shieldActive) {
+      // 护盾抵消一次碰撞
+      snake.state.shieldActive = false
+      this.events.push({ type: 'shieldBreak', data: { snakeId: snake.state.id } })
+      // 不执行死亡
+    } else {
+      this.killSnake(snake, killer)
+    }
+  }
+}
+
+// 道具生成（低概率）
+private spawnPowerUp() {
+  const rand = Math.random()
+  let type: FoodType
+  if (rand < 0.02) {
+    type = 'speedArrow'  // 2% 概率
+  } else if (rand < 0.04) {
+    type = 'shield'      // 2% 概率
+  } else if (rand < 0.06) {
+    type = 'magnet'      // 2% 概率
+  } else {
+    return // 不生成道具
+  }
+  // 生成道具...
+}
+```
+
+### 道具视觉反馈
+
+**文件**: `src/game/games/SnakeGame/SnakeScene.ts`
+
+```typescript
+// 护盾激活视觉
+private renderShieldEffect(snake: SnakeEntity, graphics: SnakeGraphics) {
+  if (!snake.state.shieldActive) return
+
+  // 在蛇头周围绘制半透明气泡
+  if (!graphics.shieldBubble) {
+    graphics.shieldBubble = this.add.circle(0, 0, 25, 0x00ffff, 0.3)
+    graphics.shieldBubble.setStrokeStyle(2, 0x00ffff)
+  }
+  graphics.shieldBubble.setPosition(snake.head.x, snake.head.y)
+  graphics.shieldBubble.setVisible(true)
+}
+
+// 护盾破碎特效
+private playShieldBreakEffect(snake: SnakeEntity) {
+  const particles = this.add.particles(snake.head.x, snake.head.y, 'particle', {
+    speed: { min: 50, max: 150 },
+    scale: { start: 0.8, end: 0 },
+    lifespan: 400,
+    tint: 0x00ffff,
+    quantity: 15
+  })
+  this.time.delayedCall(400, () => particles.destroy())
+  this.sound.play('shieldBreak', { volume: 0.4 })
+}
+
+// 速度箭头激活视觉
+private renderSpeedBoostEffect(snake: SnakeEntity) {
+  if (!snake.hasSpeedBoost) return
+
+  // 添加速度线拖尾
+  this.addSpeedTrail(snake, 0xffff00)
+}
+```
+
+### 道具 UI 提示（非按钮式）
+
+```typescript
+// 当前激活的道具状态显示（屏幕角落小图标）
+const ActiveBuffIndicator: React.FC<{ buffs: ActiveBuff[] }> = ({ buffs }) => {
   return (
-    <div className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-      {abilities.map(ability => (
-        <AbilityButton key={ability.type} {...ability} />
+    <div className="fixed left-4 top-20 flex flex-col gap-1">
+      {buffs.map(buff => (
+        <div key={buff.type} className="flex items-center gap-2 bg-black/50 rounded px-2 py-1">
+          <span className="text-lg">{BUFF_ICONS[buff.type]}</span>
+          <div className="w-12 h-1 bg-gray-600 rounded overflow-hidden">
+            <div
+              className="h-full bg-yellow-400 transition-all"
+              style={{ width: `${buff.remainingPercent}%` }}
+            />
+          </div>
+        </div>
       ))}
     </div>
   )
 }
-```
 
-**预期产物**: 进化视觉特效、能力状态渲染、React能力栏UI
+const BUFF_ICONS: Record<string, string> = {
+  speedBoost: '⚡',
+  magnet: '🧲',
+  shield: '🛡️'
+}
+```
 
 ---
 
-### Phase 6: 状态管理与通信 (gameStore.ts)
+## Phase C：主动能力系统（P2 - 延迟实施）
 
-**文件**: `src/store/gameStore.ts`
+> ⚠️ **警告**：以下内容需在 Phase A/B 验证成功后再考虑实施。
+>
+> **验证指标**：
+> - 平均存活时间不显著下降
+> - 新手首局时长 > 60 秒
+> - 道具使用率 30-50%
+> - 进化达成率：阶段 2 > 60%，阶段 3 > 30%
+
+### 能力设计（严格约束版）
+
+| 能力 | 效果 | 持续时间 | 冷却 | 代价 | 约束 |
+|------|------|----------|------|------|------|
+| 闪避 | 免疫一次碰撞 | 0.5s | 15s | 10% 长度 | 仅免疫一次，明显视觉提示 |
+| 能量球 | 命中减速 50% | 0.5s | 20s | 5 节 | 不造成死亡，仅减速 |
+
+### 架构预留（不实施）
 
 ```typescript
-interface EvolutionState {
-  evolutionLevel: number
-  abilities: Record<AbilityType, {
-    status: 'ready' | 'cooldown' | 'locked'
-    cooldownUntil?: number
-  }>
-  isFirstEvolution: boolean
+// 类型定义预留（Phase C 时启用）
+export type AbilityType = 'dodge' | 'energyBall'
+
+export interface AbilityConfig {
+  type: AbilityType
+  duration: number
+  cooldown: number
+  lengthCost: number | ((length: number) => number)  // 支持百分比
 }
 
-interface GameStore {
-  // ... 现有状态
-  evolution: EvolutionState
-
-  // Actions
-  evolve: () => void
-  activateAbility: (type: AbilityType) => void
-  updateCooldowns: () => void
-}
-
-// Phaser -> React 通信
-window.addEventListener('playerEvolved', (e: CustomEvent) => {
-  gameStore.getState().evolve()
-})
-
-// React -> Phaser 通信
-const activateAbility = (type: AbilityType) => {
-  const phaserScene = getPhaserScene()
-  phaserScene?.activatePlayerAbility(type)
+// 能力配置（Phase C 时启用）
+const ABILITY_CONFIG: Record<AbilityType, AbilityConfig> = {
+  dodge: {
+    type: 'dodge',
+    duration: 500,      // 0.5秒
+    cooldown: 15000,    // 15秒
+    lengthCost: (length) => Math.floor(length * 0.1)  // 10% 长度
+  },
+  energyBall: {
+    type: 'energyBall',
+    duration: 500,      // 减速持续0.5秒
+    cooldown: 20000,    // 20秒
+    lengthCost: 5       // 固定5节
+  }
 }
 ```
-
-**预期产物**: 完整的状态管理、Phaser与React双向通信
 
 ---
 
 ## 关键文件
 
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `src/game/games/SnakeGame/core/SnakeEntity.ts` | 修改 | **P0**: 修复加速长度消耗 bug + 添加进化检测、能力激活 |
-| `src/game/games/SnakeGame/core/types.ts` | 修改 | 新增 EvolutionStage, AbilityType, AbilityState 类型 |
-| `src/game/games/SnakeGame/core/GameWorld.ts` | 修改 | 添加进化事件、穿墙碰撞豁免、克隆体/投射物系统 |
-| `src/game/games/SnakeGame/ai/AIController.ts` | 修改 | 添加能力决策、围剿策略、以小搏大策略 |
-| `src/game/games/SnakeGame/SnakeScene.ts` | 修改 | 添加进化特效、能力视觉效果渲染 |
-| `src/game/games/SnakeGame/config/skins.ts` | 修改 | 扩展 SkinConfig 支持进化阶段视觉 |
-| `src/components/snake/AbilityBar.tsx` | 新建 | 能力栏UI组件 |
-| `src/store/gameStore.ts` | 修改 | 添加进化状态管理 |
+| 文件 | 操作 | 阶段 | 说明 |
+|------|------|------|------|
+| `src/game/games/SnakeGame/core/SnakeEntity.ts` | 修改 | P0 | 修复加速 bug + 进化检测 + 被动增益 |
+| `src/game/games/SnakeGame/core/types.ts` | 修改 | P0 | 新增 EvolutionStage, PassiveBuffs, shieldActive |
+| `src/game/games/SnakeGame/core/GameWorld.ts` | 修改 | P1 | 道具效果 + 护盾碰撞豁免 |
+| `src/game/games/SnakeGame/SnakeScene.ts` | 修改 | P0/P1 | 进化特效 + 道具视觉 |
+| `src/game/games/SnakeGame/config/skins.ts` | 修改 | P0 | 扩展 SkinConfig 支持进化视觉 |
+| `src/components/snake/EvolutionNotification.tsx` | 新建 | P0 | 进化通知组件 |
+| `src/store/gameStore.ts` | 修改 | P0/P1 | 进化状态 + 道具状态管理 |
 
 ---
 
 ## 风险与缓解
 
-| 风险 | 缓解措施 |
-|------|----------|
-| 能力叠加导致速度异常 | 设置速度上限（如 BASE_SPEED × 3），防止无限叠加 |
-| 克隆体过多导致性能问题 | 限制同时存在的克隆体数量（如最多3个），设置TTL自动清理 |
-| 穿墙状态下离场 | 穿墙仅免疫蛇体碰撞，边界检测仍然生效 |
-| 进化阈值与得分计算不一致 | 统一 score 计算公式：食物value + kills × 10 |
-| AI能力使用过于频繁/保守 | 为AI设置能力使用概率和条件阈值，可配置调整 |
-| 新手不理解进化机制 | 首次进化时显示引导提示，高亮新能力按钮 |
+| 风险 | 影响 | 缓解措施 |
+|------|------|----------|
+| 被动增益破坏平衡 | 长度≠实力 | 严格限制 5-10%，可配置调整 |
+| 护盾破坏核心规则 | 玩家困惑 | 单次免疫 + 明显视觉提示 + 低概率获取 |
+| 进化视觉不明显 | 反馈不足 | 粒子特效 + 闪光 + 音效 |
+| 新手不理解机制 | 流失 | 首次进化引导 + 简洁描述 |
+| 道具过于强力 | 公平性下降 | 低生成概率 + 短持续时间 |
 
 ---
 
 ## 测试策略
 
-### 单元测试
-- 能力冷却计时准确性
-- 进化阶段触发条件
-- 长度消耗不为负
-- 死亡后状态清理
+### Phase A 测试
+- 进化阶段触发条件（长度 10/25/50/100）
+- 被动增益数值准确性（5-10% 范围）
+- 进化视觉效果正确渲染
+- 首次进化引导显示
 
-### 集成测试
-- Phase 期间不触发蛇体碰撞
-- Clone 碰撞触发减速效果
-- Instant Boost 不穿越边界
-- 进化事件正确触发UI更新
+### Phase B 测试
+- 道具拾取效果正确应用
+- 护盾单次免疫逻辑
+- 速度箭头不消耗长度
+- 磁铁效果与现有实现一致
+- 道具生成概率符合配置
 
-### AI验证
-- 小蛇能脱离大蛇追击
-- 大蛇更容易围杀小蛇
-- 能力触发频率符合配置
+### 验证指标监控
+- 平均存活时间
+- 新手首局时长
+- 各阶段进化达成率
+- 道具使用率
 
 ---
 
 ## SESSION_ID（供 /ccg:execute 使用）
 
-- **CODEX_SESSION**: `019c0002-109a-7b91-abaf-04bd1e6f0cd1`
-- **GEMINI_SESSION**: `30223058-91f2-4450-ae9f-35509138523c`
+- **CODEX_SESSION**: `019c0552-731b-7fb3-a705-d86e7e289fdb`
+- **GEMINI_SESSION**: `2b5c495a-ec81-435a-a3ee-67e4b5b3648f`
 
 ---
 
 ## 实施优先级
 
-1. **P0 - Bug修复**: SnakeEntity.ts（修复加速长度消耗 bug）⚠️ 必须首先完成
-2. **P1 - 核心框架**: types.ts + SnakeEntity.ts（进化检测+能力状态）
-3. **P2 - 游戏逻辑**: GameWorld.ts（碰撞豁免+克隆体系统）
-4. **P3 - AI策略**: AIController.ts（能力决策+围剿策略）
-5. **P4 - 视觉渲染**: SnakeScene.ts + skins.ts（进化特效+外观变化）
-6. **P5 - UI层**: AbilityBar.tsx + gameStore.ts（能力栏+状态管理）
+1. ✅ **P0 - Bug 修复**: SnakeEntity.ts（修复加速长度消耗 bug）
+2. ✅ **P0 - Phase A 核心**: types.ts + SnakeEntity.ts（进化检测 + 被动增益）
+3. ✅ **P0 - Phase A 视觉**: SnakeScene.ts + skins.ts（进化特效 + 外观变化）
+4. ✅ **P0 - Phase A 引导**: EvolutionNotification.tsx（首次进化通知）
+5. ✅ **P1 - Phase B 道具**: GameWorld.ts + types.ts（速度箭头 + 护盾）
+6. ✅ **P1 - Phase B 视觉**: SnakeScene.ts（道具特效 + 状态指示）
+7. ⏸️ **P2 - Phase C**: 延迟至验证指标达标后实施
+
+---
+
+## 实施完成记录
+
+### 2026-02-01 完成项
+
+- ✅ 创建 `EvolutionNotification.tsx` - 进化通知组件
+- ✅ 创建 `ActiveBuffIndicator.tsx` - 激活道具状态指示器
+- ✅ 更新 `types.ts` - 添加 `ActiveBuff`, `PlayerStats` 类型和 `onEvolution` 回调
+- ✅ 更新 `GameWorld.ts` - 发送完整玩家状态（含 activeBuffs）和进化回调
+- ✅ 更新 `SnakeScene.ts` - 添加速度加成视觉效果
+- ✅ 更新 `SnakeEntity.ts` - 添加 `hasSpeedBuff` getter
+- ✅ 更新 `SnakeGamePage.tsx` - 集成新组件和状态管理

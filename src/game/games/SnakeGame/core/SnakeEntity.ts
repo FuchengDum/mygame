@@ -317,6 +317,11 @@ export class SnakeEntity {
     return Date.now() < this.buffs.magnetUntil
   }
 
+  // 检查速度加成是否激活
+  get hasSpeedBuff(): boolean {
+    return Date.now() < this.buffs.speedUntil && this.buffs.speedMultiplier > 1
+  }
+
   // 获取当前拖延值 (0-1)
   get stallValue(): number {
     return this.stallState.stallValue

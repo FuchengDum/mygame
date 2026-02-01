@@ -103,10 +103,28 @@ export interface GameResult {
   bestRank: number
 }
 
+// 激活的增益效果
+export interface ActiveBuff {
+  type: 'speed' | 'magnet' | 'shield' | 'double'
+  remainingMs: number
+  totalMs: number
+}
+
+// 玩家状态（包含进化和增益）
+export interface PlayerStats {
+  length: number
+  kills: number
+  canBoost: boolean
+  evolutionStage: number
+  shieldActive: boolean
+  activeBuffs: ActiveBuff[]
+}
+
 // 回调接口
 export interface GameCallbacks {
   onLeaderboardUpdate?: (data: LeaderboardEntry[]) => void
-  onStatsUpdate?: (stats: { length: number; kills: number; canBoost: boolean }) => void
+  onStatsUpdate?: (stats: PlayerStats) => void
   onGameOver?: (result: GameResult) => void
   onKill?: (victimName: string) => void
+  onEvolution?: (stage: number) => void
 }

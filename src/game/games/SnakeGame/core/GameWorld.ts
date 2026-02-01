@@ -154,6 +154,10 @@ export class GameWorld {
       const evolved = snake.checkEvolution()
       if (evolved) {
         this.events.push({ type: 'evolve', data: { snakeId: snake.state.id, stage: evolved.stage } })
+        // 玩家进化时触发回调
+        if (snake.state.isPlayer) {
+          this.callbacks.onEvolution?.(evolved.stage)
+        }
       }
 
       // 蛇与蛇碰撞（头撞身体）
@@ -196,10 +200,46 @@ export class GameWorld {
 
     if (this.statsThrottle >= 200 && this.player) {
       this.statsThrottle = 0
+      const now = Date.now()
+      const activeBuffs: Array<{ type: 'speed' | 'magnet' | 'shield' | 'double'; remainingMs: number; totalMs: number }> = []
+
+      // 收集激活的增益效果
+      if (this.player.buffs.speedUntil > now) {
+        activeBuffs.push({
+          type: 'speed',
+          remainingMs: this.player.buffs.speedUntil - now,
+          totalMs: 5000 // 默认持续时间
+        })
+      }
+      if (this.player.buffs.magnetUntil > now) {
+        activeBuffs.push({
+          type: 'magnet',
+          remainingMs: this.player.buffs.magnetUntil - now,
+          totalMs: 8000
+        })
+      }
+      if (this.player.state.shieldActive) {
+        activeBuffs.push({
+          type: 'shield',
+          remainingMs: Math.max(0, this.player.state.shieldUntil - now),
+          totalMs: 10000
+        })
+      }
+      if (this.player.buffs.scoreUntil > now) {
+        activeBuffs.push({
+          type: 'double',
+          remainingMs: this.player.buffs.scoreUntil - now,
+          totalMs: 8000
+        })
+      }
+
       this.callbacks.onStatsUpdate?.({
         length: this.player.state.length,
         kills: this.player.state.kills,
-        canBoost: this.player.canBoost
+        canBoost: this.player.canBoost,
+        evolutionStage: this.player.state.evolutionStage,
+        shieldActive: this.player.state.shieldActive,
+        activeBuffs
       })
     }
   }
