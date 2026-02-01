@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { GameWorld } from './core/GameWorld'
 import { AIController } from './ai/AIController'
 import { SnakeEntity } from './core/SnakeEntity'
-import type { Food, GameConfig, GameResult, LeaderboardEntry } from './core/types'
+import type { Food, GameConfig, GameResult, LeaderboardEntry, PlayerStats } from './core/types'
 import { WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE } from './core/types'
 import type { SkinConfig } from './config/skins'
 import { getSkinById } from './config/skins'
@@ -23,9 +23,10 @@ interface FoodGraphics {
 
 export interface BattleCallbacks {
   onLeaderboardUpdate?: (data: LeaderboardEntry[]) => void
-  onStatsUpdate?: (stats: { length: number; kills: number; canBoost: boolean }) => void
+  onStatsUpdate?: (stats: PlayerStats) => void
   onGameOver?: (result: GameResult) => void
   onKill?: (victimName: string) => void
+  onEvolution?: (stage: number) => void
 }
 
 type SceneInitData = {
@@ -294,7 +295,8 @@ export class SnakeScene extends Phaser.Scene {
         this.isPlaying = false
         this.callbacks.onGameOver?.(result)
       },
-      onKill: this.callbacks.onKill
+      onKill: this.callbacks.onKill,
+      onEvolution: this.callbacks.onEvolution
     })
 
     // 初始化AI控制器
@@ -578,6 +580,9 @@ export class SnakeScene extends Phaser.Scene {
     // 渲染护盾效果
     this.renderShieldEffect(snake, sg)
 
+    // 渲染速度加成效果
+    this.renderSpeedBuffEffect(snake, sg)
+
     // 渲染进化外观
     this.renderSnakeEvolution(snake, sg)
   }
@@ -594,6 +599,29 @@ export class SnakeScene extends Phaser.Scene {
       sg.shieldBubble.setScale(pulse)
     } else if (sg.shieldBubble) {
       sg.shieldBubble.setVisible(false)
+    }
+  }
+
+  private renderSpeedBuffEffect(snake: SnakeEntity, sg: SnakeGraphics) {
+    // 速度加成时给蛇身添加黄色闪烁效果
+    if (snake.hasSpeedBuff && sg.segments.length > 0) {
+      const flashIntensity = 0.5 + Math.sin(this.time.now / 150) * 0.5
+      // 在白色和黄色之间插值
+      const r = 255
+      const g = 255
+      const b = Math.floor(255 * (1 - flashIntensity))
+      const tint = Phaser.Display.Color.GetColor(r, g, b)
+      // 只给前几节添加效果
+      const effectLength = Math.min(5, sg.segments.length)
+      for (let i = 0; i < effectLength; i++) {
+        sg.segments[i].setTint(tint)
+      }
+    } else if (sg.segments.length > 0) {
+      // 速度加成结束后清除 tint（恢复原色由 renderSnakeEvolution 处理）
+      const effectLength = Math.min(5, sg.segments.length)
+      for (let i = 0; i < effectLength; i++) {
+        sg.segments[i].clearTint()
+      }
     }
   }
 

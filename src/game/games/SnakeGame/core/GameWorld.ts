@@ -5,6 +5,16 @@ import { SpatialHash, distance } from './SpatialHash'
 import type { Food, FoodType, Point, GameCallbacks, GameConfig, GameResult, GameEvent } from './types'
 import { WORLD_WIDTH, WORLD_HEIGHT } from './types'
 
+// Buff 持续时间常量（毫秒）
+const BUFF_DURATIONS = {
+  speed: 5000,
+  speedArrow: 2000,
+  slow: 5000,
+  magnet: 8000,
+  double: 8000,
+  shield: 10000
+} as const
+
 const FOOD_DEFINITIONS: Record<FoodType, { radius: number; value: number; growth: number; spawnWeight: number }> = {
   pellet: { radius: 5, value: 5, growth: 1, spawnWeight: 80 },
   big: { radius: 10, value: 25, growth: 3, spawnWeight: 10 },
@@ -154,6 +164,14 @@ export class GameWorld {
       const evolved = snake.checkEvolution()
       if (evolved) {
         this.events.push({ type: 'evolve', data: { snakeId: snake.state.id, stage: evolved.stage } })
+        // 玩家进化时触发回调（隔离异常避免中断主循环）
+        if (snake.state.isPlayer) {
+          try {
+            this.callbacks.onEvolution?.(evolved.stage)
+          } catch (e) {
+            console.error('[GameWorld] onEvolution callback error:', e)
+          }
+        }
       }
 
       // 蛇与蛇碰撞（头撞身体）
@@ -196,11 +214,51 @@ export class GameWorld {
 
     if (this.statsThrottle >= 200 && this.player) {
       this.statsThrottle = 0
-      this.callbacks.onStatsUpdate?.({
-        length: this.player.state.length,
-        kills: this.player.state.kills,
-        canBoost: this.player.canBoost
-      })
+      const now = Date.now()
+      const activeBuffs: Array<{ type: 'speed' | 'magnet' | 'shield' | 'double'; remainingMs: number; totalMs: number }> = []
+
+      // 收集激活的增益效果
+      if (this.player.buffs.speedUntil > now) {
+        activeBuffs.push({
+          type: 'speed',
+          remainingMs: this.player.buffs.speedUntil - now,
+          totalMs: BUFF_DURATIONS.speed
+        })
+      }
+      if (this.player.buffs.magnetUntil > now) {
+        activeBuffs.push({
+          type: 'magnet',
+          remainingMs: this.player.buffs.magnetUntil - now,
+          totalMs: BUFF_DURATIONS.magnet
+        })
+      }
+      if (this.player.state.shieldActive) {
+        activeBuffs.push({
+          type: 'shield',
+          remainingMs: Math.max(0, this.player.state.shieldUntil - now),
+          totalMs: BUFF_DURATIONS.shield
+        })
+      }
+      if (this.player.buffs.scoreUntil > now) {
+        activeBuffs.push({
+          type: 'double',
+          remainingMs: this.player.buffs.scoreUntil - now,
+          totalMs: BUFF_DURATIONS.double
+        })
+      }
+
+      try {
+        this.callbacks.onStatsUpdate?.({
+          length: this.player.state.length,
+          kills: this.player.state.kills,
+          canBoost: this.player.canBoost,
+          evolutionStage: this.player.state.evolutionStage,
+          shieldActive: this.player.state.shieldActive,
+          activeBuffs
+        })
+      } catch (e) {
+        console.error('[GameWorld] onStatsUpdate callback error:', e)
+      }
     }
   }
 
@@ -252,23 +310,23 @@ export class GameWorld {
   private applyFoodEffect(snake: SnakeEntity, type: FoodType) {
     switch (type) {
       case 'speed':
-        snake.applyBuff('speed', 1.45, 5000)
+        snake.applyBuff('speed', 1.45, BUFF_DURATIONS.speed)
         break
       case 'slow':
-        snake.applyBuff('speed', 0.75, 5000)
+        snake.applyBuff('speed', 0.75, BUFF_DURATIONS.slow)
         break
       case 'double':
-        snake.applyBuff('score', 2, 8000)
+        snake.applyBuff('score', 2, BUFF_DURATIONS.double)
         break
       case 'magnet':
-        snake.applyBuff('magnet', 1, 8000)
+        snake.applyBuff('magnet', 1, BUFF_DURATIONS.magnet)
         break
       case 'speedArrow':
-        snake.applyBuff('speed', 1.5, 2000)
+        snake.applyBuff('speed', 1.5, BUFF_DURATIONS.speedArrow)
         break
       case 'shield':
         snake.state.shieldActive = true
-        snake.state.shieldUntil = Date.now() + 10000 // 10秒超时
+        snake.state.shieldUntil = Date.now() + BUFF_DURATIONS.shield
         break
     }
   }

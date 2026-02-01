@@ -4,12 +4,14 @@ import Phaser from 'phaser'
 import { useGameStore } from '../store/gameStore'
 import { createGameConfig } from '../game/config'
 import { SnakeScene, type BattleCallbacks } from '../game/games/SnakeGame/SnakeScene'
-import type { GameConfig, GameResult, LeaderboardEntry } from '../game/games/SnakeGame/core/types'
+import type { GameConfig, GameResult, LeaderboardEntry, PlayerStats } from '../game/games/SnakeGame/core/types'
 import Joystick from '../components/VirtualController/Joystick'
 import LobbyUI from '../components/snake/LobbyUI'
 import Leaderboard from '../components/snake/Leaderboard'
 import BoostButton from '../components/snake/BoostButton'
 import ResultModal from '../components/snake/ResultModal'
+import EvolutionNotification from '../components/snake/EvolutionNotification'
+import ActiveBuffIndicator from '../components/snake/ActiveBuffIndicator'
 import { useOrientation } from '../hooks/useOrientation'
 import { useViewport } from '../hooks/useViewport'
 
@@ -23,11 +25,19 @@ export default function SnakeGamePage() {
 
   const [gameState, setGameState] = useState<GameState>('lobby')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [stats, setStats] = useState({ length: 5, kills: 0, canBoost: false })
+  const [stats, setStats] = useState<PlayerStats>({
+    length: 5,
+    kills: 0,
+    canBoost: false,
+    evolutionStage: 1,
+    shieldActive: false,
+    activeBuffs: []
+  })
   const [gameResult, setGameResult] = useState<GameResult | null>(null)
   const [isBoosting, setIsBoosting] = useState(false)
   const [killNotification, setKillNotification] = useState<string | null>(null)
   const [playerId, setPlayerId] = useState<string>('')
+  const [evolutionNotification, setEvolutionNotification] = useState<number | null>(null)
 
   const [highScore, setHighScore] = useState(() => {
     const saved = getProgress('snake') as { highScore?: number } | null
@@ -53,7 +63,8 @@ export default function SnakeGamePage() {
     onLeaderboardUpdate: () => {},
     onStatsUpdate: () => {},
     onGameOver: () => {},
-    onKill: () => {}
+    onKill: () => {},
+    onEvolution: () => {}
   })
 
   // 更新回调属性（不替换对象）
@@ -75,6 +86,9 @@ export default function SnakeGamePage() {
     setKillNotification(`击杀 ${victimName}!`)
     const timeoutId = window.setTimeout(() => setKillNotification(null), 2000)
     timeoutIdsRef.current.add(timeoutId)
+  }
+  callbacksRef.current.onEvolution = (stage) => {
+    setEvolutionNotification(stage)
   }
 
   // 初始化Phaser
@@ -239,10 +253,18 @@ export default function SnakeGamePage() {
 
     setGameState('playing')
     setLeaderboard([])
-    setStats({ length: 5, kills: 0, canBoost: false })
+    setStats({
+      length: 5,
+      kills: 0,
+      canBoost: false,
+      evolutionStage: 1,
+      shieldActive: false,
+      activeBuffs: []
+    })
     setGameResult(null)
     setIsBoosting(false)
     setPlayerId(`snake_1`)
+    setEvolutionNotification(null)
 
     const scene = sceneRef.current
     if (scene) {
@@ -310,8 +332,14 @@ export default function SnakeGamePage() {
             style={{ opacity: uiOpacity.stats }}
           >
             <div className="text-cyan-400 font-mono text-lg font-bold">长度: {stats.length}</div>
-            <div className="text-red-400 text-sm font-semibold">击杀: {stats.kills}</div>
+            <div className="text-red-400 font-mono text-sm font-semibold">击杀: {stats.kills}</div>
+            {stats.evolutionStage > 1 && (
+              <div className="text-purple-400 font-mono text-xs mt-1">Stage {stats.evolutionStage}</div>
+            )}
           </div>
+
+          {/* 激活道具状态指示器 */}
+          <ActiveBuffIndicator buffs={stats.activeBuffs} />
 
           {/* 排行榜 */}
           <div style={{ opacity: uiOpacity.leaderboard, transition: 'opacity 0.2s' }}>
@@ -354,6 +382,14 @@ export default function SnakeGamePage() {
           disabled={!stats.canBoost}
           isBoosting={isBoosting}
           isLandscape={isLandscape}
+        />
+      )}
+
+      {/* 进化通知 */}
+      {evolutionNotification && (
+        <EvolutionNotification
+          stage={evolutionNotification}
+          onDismiss={() => setEvolutionNotification(null)}
         />
       )}
 
